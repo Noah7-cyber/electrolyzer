@@ -1,0 +1,20 @@
+127.0.0.1 - - [13/May/2026 14:20:37] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [13/May/2026 14:20:37] "GET /script.js HTTP/1.1" 200 -
+127.0.0.1 - - [13/May/2026 14:20:37] "GET /style.css HTTP/1.1" 200 -
+127.0.0.1 - - [13/May/2026 14:20:39] code 404, message File not found
+127.0.0.1 - - [13/May/2026 14:20:39] "GET /socket.io/?EIO=4&transport=polling&t=PuXjWmR HTTP/1.1" 404 -
+127.0.0.1 - - [13/May/2026 14:20:40] code 404, message File not found
+127.0.0.1 - - [13/May/2026 14:20:40] "GET /socket.io/?EIO=4&transport=polling&t=PuXjW_5 HTTP/1.1" 404 -
+127.0.0.1 - - [13/May/2026 14:20:41] code 404, message File not found
+127.0.0.1 - - [13/May/2026 14:20:41] "GET /socket.io/?EIO=4&transport=polling&t=PuXjXPw HTTP/1.1" 404 -
+127.0.0.1 - - [13/May/2026 14:20:45] code 404, message File not found
+127.0.0.1 - - [13/May/2026 14:20:45] "GET /socket.io/?EIO=4&transport=polling&t=PuXjYL- HTTP/1.1" 404 -
+127.0.0.1 - - [13/May/2026 14:23:03] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [13/May/2026 14:23:03] "GET /style.css HTTP/1.1" 200 -
+127.0.0.1 - - [13/May/2026 14:23:03] "GET /script.js HTTP/1.1" 200 -
+127.0.0.1 - - [13/May/2026 14:23:04] code 404, message File not found
+127.0.0.1 - - [13/May/2026 14:23:04] "GET /socket.io/?EIO=4&transport=polling&t=PuXk46y HTTP/1.1" 404 -
+127.0.0.1 - - [13/May/2026 14:23:05] code 404, message File not found
+127.0.0.1 - - [13/May/2026 14:23:05] "GET /socket.io/?EIO=4&transport=polling&t=PuXk4Rm HTTP/1.1" 404 -
+127.0.0.1 - - [13/May/2026 14:23:08] code 404, message File not found
+127.0.0.1 - - [13/May/2026 14:23:08] "GET /socket.io/?EIO=4&transport=polling&t=PuXk546 HTTP/1.1" 404 -
