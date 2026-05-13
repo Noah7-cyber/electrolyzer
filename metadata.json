@@ -1,0 +1,6 @@
+{
+  "name": "Automated Electrolyzer Dashboard",
+  "description": "Dark industrial telemetry dashboard for an automated electrolyzer system featuring live visualization and telemetry.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

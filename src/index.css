@@ -1,0 +1,103 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-mono: 'Courier New', Courier, monospace, "JetBrains Mono", ui-monospace;
+  
+  --color-theme-bg: #0a0a0a;
+  --color-theme-panel: #121212;
+  --color-theme-border: #2a2a2a;
+  --color-theme-cyan: #00f2ff;
+  --color-theme-cyan-dim: rgba(0, 242, 255, 0.1);
+  --color-theme-amber: #ffbf00;
+  --color-theme-red: #ff4444;
+  --color-theme-text-main: #e0e0e0;
+  --color-theme-text-dim: #707070;
+  --color-theme-card: rgba(255, 255, 255, 0.03);
+}
+
+body {
+  font-family: var(--font-mono);
+  background-color: var(--color-theme-bg);
+  color: var(--color-theme-text-main);
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.grid-bg {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(var(--color-theme-border) 1px, transparent 1px), 
+                    linear-gradient(90deg, var(--color-theme-border) 1px, transparent 1px);
+  background-size: 40px 40px;
+  opacity: 0.2;
+  pointer-events: none;
+  z-index: 0;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-theme-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-theme-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-theme-text-dim);
+}
+
+input[type=range] {
+  -webkit-appearance: none;
+  background: transparent;
+  height: 4px;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 4px;
+  background: #333;
+  border-radius: 2px;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: var(--color-theme-cyan);
+  cursor: pointer;
+  margin-top: -6px;
+}
+input[type=range]:disabled::-webkit-slider-thumb {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: #555;
+}
+input[type=range]:disabled::-webkit-slider-runnable-track {
+  cursor: not-allowed;
+}
+
+.elegant-button {
+  background: var(--color-theme-cyan);
+  color: #000;
+  border: none;
+  padding: 12px 24px;
+  font-weight: bold;
+  cursor: pointer;
+  border-radius: 4px;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+  transition: opacity 0.2s ease;
+}
+.elegant-button:hover {
+  opacity: 0.8;
+}
+.elegant-button.stop {
+  background: var(--color-theme-red);
+  color: #fff;
+}
+
