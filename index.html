@@ -51,7 +51,7 @@
 
         <!-- Header -->
         <header class="h-[70px] border-b border-theme-border bg-theme-panel px-6 flex items-center justify-between z-10 shrink-0">
-            <div class="flex flex-col">
+            <div class="flex flex-col flex-1">
                 <h1 class="text-[18px] tracking-[2px] text-theme-cyan uppercase flex items-center gap-2">
                     <i class="fa-solid fa-droplet w-5 h-5"></i>
                     ELECTROLYZER ALPHA-9
@@ -59,7 +59,18 @@
                 <p class="text-[10px] text-theme-text-dim">INDUSTRIAL TELEMETRY NODE // 0xAF234</p>
             </div>
 
-            <div class="flex items-center gap-6">
+            <div class="flex-1 flex justify-center">
+                <div class="flex border border-theme-border rounded overflow-hidden">
+                    <button id="btn-mode-live" class="px-4 py-1 text-[12px] uppercase font-bold tracking-[1px] transition-colors duration-200 bg-theme-cyan text-black">
+                        Live Telemetry
+                    </button>
+                    <button id="btn-mode-sim" class="px-4 py-1 text-[12px] uppercase font-bold tracking-[1px] transition-colors duration-200 bg-transparent text-theme-text-dim hover:text-theme-cyan">
+                        Simulation Mode
+                    </button>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-6 flex-1">
                 <div id="system-status-badge" class="bg-theme-cyan-dim border border-theme-cyan text-theme-cyan px-3 py-1 rounded text-[12px] flex items-center gap-2 uppercase transition-colors duration-300">
                     <div id="system-status-indicator" class="w-2 h-2 rounded-full bg-theme-text-dim"></div>
                     <span id="system-status-text">System Offline</span>
@@ -74,19 +85,51 @@
         <main class="flex-1 grid grid-cols-1 lg:grid-cols-[240px_1fr_240px] gap-[1px] bg-theme-border overflow-hidden min-h-0 z-10">
             <!-- Left Sidebar -->
             <aside class="bg-theme-panel p-5 flex flex-col gap-5 overflow-y-auto min-h-0">
-                <div class="bg-theme-card border border-theme-border p-4 rounded relative">
-                    <div class="text-[10px] text-theme-text-dim uppercase tracking-[1px] mb-2 flex items-center gap-2"><i class="fa-solid fa-bolt w-3 h-3"></i> Power Station</div>
-                    <div class="text-lg font-bold text-theme-text-main mb-1">
-                        System Power: <br/> <span class="text-theme-cyan">11.1V</span> <span class="text-[12px] text-theme-text-dim">(3S Pack)</span>
+                <div id="live-power-cards" class="flex flex-col gap-5">
+                    <div class="bg-theme-card border border-theme-border p-4 rounded relative">
+                        <div class="text-[10px] text-theme-text-dim uppercase tracking-[1px] mb-2 flex items-center gap-2"><i class="fa-solid fa-bolt w-3 h-3"></i> Power Station</div>
+                        <div class="text-lg font-bold text-theme-text-main mb-1">
+                            System Power: <br/> <span class="text-theme-cyan">11.1V</span> <span class="text-[12px] text-theme-text-dim">(3S Pack)</span>
+                        </div>
+                    </div>
+
+                    <div class="bg-theme-card border border-theme-border p-4 rounded relative">
+                        <div class="text-[10px] text-theme-text-dim uppercase tracking-[1px] mb-2 flex items-center gap-2"><i class="fa-solid fa-sun w-3 h-3"></i> Solar Charging</div>
+                        <div class="text-md font-bold text-theme-amber">
+                            Input: Active
+                        </div>
+                        <div class="text-[10px] mt-1 text-theme-text-dim">BOOSTING TO 12.6V</div>
                     </div>
                 </div>
 
-                <div class="bg-theme-card border border-theme-border p-4 rounded relative">
-                    <div class="text-[10px] text-theme-text-dim uppercase tracking-[1px] mb-2 flex items-center gap-2"><i class="fa-solid fa-sun w-3 h-3"></i> Solar Charging</div>
-                    <div class="text-md font-bold text-theme-amber">
-                        Input: Active
+                <div id="simulation-parameters-card" class="bg-theme-card border border-theme-border p-4 rounded relative hidden flex-col gap-4">
+                    <div class="text-[10px] text-theme-text-dim uppercase tracking-[1px] flex items-center gap-2"><i class="fa-solid fa-flask w-3 h-3"></i> Simulation Parameters</div>
+
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] text-theme-text-dim uppercase">Electrolyte Type</label>
+                        <select id="sim-electrolyte" class="elegant-select w-full bg-theme-bg border border-theme-border text-theme-text-main p-2 text-[12px] outline-none focus:border-theme-cyan">
+                            <option value="distilled">Distilled Water (0.01x)</option>
+                            <option value="baking_soda">Baking Soda (0.4x)</option>
+                            <option value="koh">KOH (1.0x - Optimal)</option>
+                        </select>
                     </div>
-                    <div class="text-[10px] mt-1 text-theme-text-dim">BOOSTING TO 12.6V</div>
+
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] text-theme-text-dim uppercase">Electrode Material</label>
+                        <select id="sim-material" class="elegant-select w-full bg-theme-bg border border-theme-border text-theme-text-main p-2 text-[12px] outline-none focus:border-theme-cyan">
+                            <option value="pencil">Pencil Lead (5.0Ω)</option>
+                            <option value="graphite">Pure Graphite (1.0Ω)</option>
+                            <option value="platinum">Platinum (0.1Ω)</option>
+                        </select>
+                    </div>
+
+                    <div class="flex flex-col gap-1">
+                        <label class="text-[10px] text-theme-text-dim uppercase flex justify-between">
+                            <span>Electrode Distance</span>
+                            <span id="sim-distance-display" class="text-theme-cyan">5 cm</span>
+                        </label>
+                        <input type="range" id="sim-distance" min="1" max="10" value="5" class="w-full">
+                    </div>
                 </div>
 
                 <div id="system-offline-warning" class="mt-2 text-[10px] text-theme-red leading-relaxed p-3 border border-theme-red bg-theme-red/10 rounded">
