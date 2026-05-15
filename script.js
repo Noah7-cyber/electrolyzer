@@ -5,6 +5,16 @@ const elSystemStatusText = document.getElementById('system-status-text');
 const elUptimeDisplay = document.getElementById('uptime-display');
 const elSystemOfflineWarning = document.getElementById('system-offline-warning');
 
+const btnModeLive = document.getElementById('btn-mode-live');
+const btnModeSim = document.getElementById('btn-mode-sim');
+const livePowerCards = document.getElementById('live-power-cards');
+const simParamsCard = document.getElementById('simulation-parameters-card');
+
+const simElectrolyte = document.getElementById('sim-electrolyte');
+const simMaterial = document.getElementById('sim-material');
+const simDistance = document.getElementById('sim-distance');
+const simDistanceDisplay = document.getElementById('sim-distance-display');
+
 const elValH2 = document.getElementById('val-h2');
 const elValWater = document.getElementById('val-water');
 const elValWaterCm = document.getElementById('val-water-cm');
@@ -24,6 +34,7 @@ const container = document.getElementById('canvas-container');
 
 // State
 let isRunning = false;
+let isSimulationMode = false;
 let currentPwm = 0;
 let uptimeSeconds = 0;
 let uptimeInterval = null;
@@ -32,8 +43,12 @@ let telemetry = {
     h2Ppm: 0,
     waterLevelCm: 20, // Max safe is 20, Low is < 8
     pumpActive: false,
-    manualPumpOverride: false
+    manualPumpOverride: false,
+    totalH2mL: 0 // Track total H2 produced
 };
+
+// Simulation State
+let bakingSodaRunTime = 0; // seconds
 
 // History for Chart
 const maxHistoryPoints = 60;
@@ -152,6 +167,29 @@ function updateUI() {
     // Telemetry Values
     elValH2.innerHTML = `${telemetry.h2Ppm.toFixed(1)} <span class="text-[14px] text-theme-text-dim ml-1 font-normal">PPM</span>`;
 
+    // Mode Toggle Styling
+    if (isSimulationMode) {
+        btnModeSim.className = 'px-4 py-1 text-[12px] uppercase font-bold tracking-[1px] transition-colors duration-200 bg-theme-cyan text-black';
+        btnModeLive.className = 'px-4 py-1 text-[12px] uppercase font-bold tracking-[1px] transition-colors duration-200 bg-transparent text-theme-text-dim hover:text-theme-cyan';
+
+        livePowerCards.classList.add('hidden');
+        simParamsCard.classList.remove('hidden');
+        simParamsCard.classList.remove('disabled');
+        simElectrolyte.disabled = false;
+        simMaterial.disabled = false;
+        simDistance.disabled = false;
+    } else {
+        btnModeLive.className = 'px-4 py-1 text-[12px] uppercase font-bold tracking-[1px] transition-colors duration-200 bg-theme-cyan text-black';
+        btnModeSim.className = 'px-4 py-1 text-[12px] uppercase font-bold tracking-[1px] transition-colors duration-200 bg-transparent text-theme-text-dim hover:text-theme-cyan';
+
+        livePowerCards.classList.remove('hidden');
+        simParamsCard.classList.remove('hidden');
+        simParamsCard.classList.add('disabled');
+        simElectrolyte.disabled = true;
+        simMaterial.disabled = true;
+        simDistance.disabled = true;
+    }
+
     // Water Logic
     let waterStatus = telemetry.waterLevelCm > 8 ? 'Safe' : 'Low';
     let waterColorClass = telemetry.waterLevelCm > 8 ? 'text-theme-cyan' : 'text-theme-red';
@@ -196,8 +234,26 @@ function drawCanvas() {
 
     ctx.clearRect(0, 0, w, h);
 
+    // Baking Soda Murky Water Logic
+    let waterColorTank = 'rgba(0, 100, 255, 0.08)';
+    let waterColorFluid = 'rgba(0, 150, 255, 0.15)';
+
+    if (isSimulationMode && simElectrolyte.value === 'baking_soda') {
+        const degradationPct = Math.min(1, bakingSodaRunTime / 120);
+        // Transition from blue to murky greenish-brown
+        // Clear Blue: (0, 150, 255) -> Murky: (100, 120, 50)
+        const r = Math.floor(0 + (100 - 0) * degradationPct);
+        const g = Math.floor(150 + (120 - 150) * degradationPct);
+        const b = Math.floor(255 + (50 - 255) * degradationPct);
+        const a1 = 0.08 + (0.4 - 0.08) * degradationPct; // Make less transparent
+        const a2 = 0.15 + (0.5 - 0.15) * degradationPct;
+
+        waterColorTank = `rgba(${r}, ${g}, ${b}, ${a1})`;
+        waterColorFluid = `rgba(${r}, ${g}, ${b}, ${a2})`;
+    }
+
     // Glass Tank Background / Water
-    ctx.fillStyle = 'rgba(0, 100, 255, 0.08)';
+    ctx.fillStyle = waterColorTank;
     ctx.fillRect(w * 0.05, h * 0.1, w * 0.9, h * 0.85);
 
     // Water fluid (visual level based on CM, mapping 20cm -> top, 0cm -> bottom)
@@ -205,7 +261,7 @@ function drawCanvas() {
     const waterBaseY = h * 0.95;
     const waterTopY = waterBaseY - (h * 0.65 * waterHeightPct);
 
-    ctx.fillStyle = 'rgba(0, 150, 255, 0.15)';
+    ctx.fillStyle = waterColorFluid;
     ctx.fillRect(w * 0.05 + 5, waterTopY, w * 0.9 - 10, waterBaseY - waterTopY - 5);
 
     // Top water line
@@ -218,8 +274,19 @@ function drawCanvas() {
 
     // Electrodes setup
     const electrodeW = Math.min(w * 0.2, 50);
-    const anodeX = w * 0.3;
-    const cathodeX = w * 0.7;
+
+    // Distance Mapping (1cm to 10cm) -> Distance from center
+    let distanceCm = 5;
+    if (isSimulationMode) {
+        distanceCm = parseFloat(simDistance.value);
+    }
+    const center = w * 0.5;
+    const maxOffset = w * 0.35; // The max distance from center an electrode can be
+    const offset = (distanceCm / 10) * maxOffset;
+
+    const anodeX = center - offset;
+    const cathodeX = center + offset;
+
     const electrodeTop = h * 0.2;
     const electrodeH = h * 0.65;
 
@@ -227,7 +294,16 @@ function drawCanvas() {
         const color = isAnode ? '#ffbf00' : '#00f2ff';
         const sign = isAnode ? '+' : '-';
 
-        ctx.fillStyle = '#333';
+        // Material fill color
+        let fill = '#333';
+        if (isSimulationMode) {
+            const mat = simMaterial.value;
+            if (mat === 'platinum') fill = '#e5e4e2'; // Metallic white
+            else if (mat === 'graphite') fill = '#111'; // Pure black
+            else fill = '#555'; // Dull grey for pencil
+        }
+
+        ctx.fillStyle = fill;
         ctx.fillRect(x - electrodeW/2, electrodeTop, electrodeW, electrodeH);
 
         // Active border
@@ -260,7 +336,19 @@ function drawCanvas() {
     };
 
     if (isRunning && currentPwm > 0 && telemetry.waterLevelCm > 5) { // Needs water to bubble
-        const spawnMultiplier = (currentPwm / 100);
+        // Bubble density tied to Amperage in Simulation, PWM in Live
+        let spawnMultiplier = 0;
+        if (isSimulationMode) {
+            // Tie to theoretical current. High efficiency might yield ~10-20 amps.
+            // Cap visual scaling around 20 amps for sanity.
+            spawnMultiplier = Math.min(20, currentSimulationAmps) / 5; // e.g. 10 Amps = 2.0 multiplier
+        } else {
+            spawnMultiplier = (currentPwm / 100) * 2;
+        }
+
+        // Ensure some bubbles if running but low efficiency
+        if (spawnMultiplier < 0.1) spawnMultiplier = 0.1;
+
         // Hydrogen (Cathode)
         const h2Rate = spawnMultiplier * 3;
         for(let i=0; i<Math.floor(h2Rate); i++) spawnBubble(false);
@@ -347,6 +435,32 @@ btnTriggerPump.addEventListener('mouseleave', () => {
     telemetry.manualPumpOverride = false;
 });
 
+// Mode Buttons
+btnModeLive.addEventListener('click', () => {
+    if (isSimulationMode) {
+        isSimulationMode = false;
+        addSystemMessage('SWITCHED TO LIVE TELEMETRY MODE');
+        updateUI();
+    }
+});
+
+btnModeSim.addEventListener('click', () => {
+    if (!isSimulationMode) {
+        isSimulationMode = true;
+        addSystemMessage('SWITCHED TO SIMULATION MODE');
+        updateUI();
+    }
+});
+
+simDistance.addEventListener('input', (e) => {
+    simDistanceDisplay.innerText = `${e.target.value} cm`;
+});
+
+simElectrolyte.addEventListener('change', () => {
+    // Reset degradation when changed
+    bakingSodaRunTime = 0;
+});
+
 
 // --- Uptime Loop ---
 setInterval(() => {
@@ -355,26 +469,84 @@ setInterval(() => {
 }, 1000);
 
 
-// --- Dummy Data & Socket.io Simulation ---
+// --- Simulation Physics Engine & Logic Loop ---
+const CONSTANTS = {
+    voltage: 12.0,
+    yieldMlPerAmpMin: 7.5,
+    containerVolumeMl: 5000,
+    ventLeakPpmPerSec: 50,
 
-// Setup Socket.io placeholder
-const socket = io();
+    conductivities: {
+        'distilled': 0.01,
+        'baking_soda': 0.4,
+        'koh': 1.0
+    },
 
-// Replace this setInterval logic with real socket data later
-setInterval(() => {
-    // Simulate H2 PPM based on PWM
-    const targetH2 = isRunning ? (currentPwm * 1.2) : Math.max(0, telemetry.h2Ppm - 5);
-    telemetry.h2Ppm = telemetry.h2Ppm + (targetH2 - telemetry.h2Ppm) * 0.1 + (isRunning ? (Math.random()*2 - 1) : -(Math.random()*0.5));
-    telemetry.h2Ppm = Math.max(0, telemetry.h2Ppm);
-
-    // Update History
-    h2History.shift();
-    h2History.push(telemetry.h2Ppm);
-
-    // Simulate Water Level (Decreases slowly when running)
-    if (isRunning && currentPwm > 0) {
-        telemetry.waterLevelCm -= (currentPwm * 0.0005);
+    materials: {
+        'platinum': 0.1,
+        'graphite': 1.0,
+        'pencil': 5.0
     }
+};
+
+let currentSimulationAmps = 0;
+
+setInterval(() => {
+    if (isSimulationMode) {
+        // --- SIMULATION MODE ---
+        let currentDraw = 0;
+
+        if (isRunning && currentPwm > 0 && telemetry.waterLevelCm > 0) {
+            // Get inputs
+            const distanceCm = parseFloat(simDistance.value);
+            const materialRes = CONSTANTS.materials[simMaterial.value];
+            let conductivity = CONSTANTS.conductivities[simElectrolyte.value];
+
+            // Baking Soda degradation
+            if (simElectrolyte.value === 'baking_soda') {
+                bakingSodaRunTime++;
+                // Drop to 50% efficiency over 120 seconds
+                const degradationFactor = Math.max(0.5, 1.0 - (bakingSodaRunTime / 120) * 0.5);
+                conductivity *= degradationFactor;
+            }
+
+            // Calculate Total Resistance: (Material Resistance * Distance) / Conductivity
+            const totalResistance = (materialRes * distanceCm) / conductivity;
+
+            // Calculate Amperage: (12V / Total Resistance) * (PWM / 100)
+            currentDraw = (CONSTANTS.voltage / totalResistance) * (currentPwm / 100);
+
+            // Water consumes slowly proportional to amperage
+            telemetry.waterLevelCm -= (currentDraw * 0.005);
+        }
+
+        currentSimulationAmps = currentDraw;
+
+        // H2 Production (mL/min) = Amperage * 7.5
+        // Per second: (Amperage * 7.5) / 60
+        const h2MlPerSec = (currentDraw * CONSTANTS.yieldMlPerAmpMin) / 60;
+        telemetry.totalH2mL += h2MlPerSec;
+
+        // Convert total H2 volume to PPM in 5000mL container
+        let calculatedPpm = (telemetry.totalH2mL / CONSTANTS.containerVolumeMl) * 1000000;
+
+        // Vent leak
+        calculatedPpm -= CONSTANTS.ventLeakPpmPerSec;
+        calculatedPpm = Math.max(0, calculatedPpm);
+
+        // Back-calculate totalH2mL from the new PPM (so it doesn't drop below 0 effectively)
+        telemetry.totalH2mL = (calculatedPpm * CONSTANTS.containerVolumeMl) / 1000000;
+        telemetry.h2Ppm = calculatedPpm;
+
+    } else {
+        // --- LIVE TELEMETRY MODE ---
+        currentSimulationAmps = 0;
+        // In reality, this data would come from Socket.io.
+        // For visual sake of the dashboard when no data is arriving, slowly vent
+        telemetry.h2Ppm = Math.max(0, telemetry.h2Ppm - CONSTANTS.ventLeakPpmPerSec);
+    }
+
+    // Common logic (Pump, history, UI)
 
     // Simulate Pump logic (Auto refill if low, or manual override)
     if (telemetry.waterLevelCm < 8) {
@@ -392,6 +564,10 @@ setInterval(() => {
     // Clamp water level
     telemetry.waterLevelCm = Math.min(20, Math.max(0, telemetry.waterLevelCm));
 
+    // Update History
+    h2History.shift();
+    h2History.push(telemetry.h2Ppm);
+
     // Flash values for feedback
     triggerGlow(elValH2);
     triggerGlow(elValWater);
@@ -401,20 +577,19 @@ setInterval(() => {
 
 }, 1000);
 
+// Setup Socket.io placeholder
+const socket = io();
+
 // Example Socket.io Listener for Real Data
 socket.on('telemetry', (data) => {
-    /*
-    telemetry.h2Ppm = data.mq2_ppm;
-    telemetry.waterLevelCm = data.ultrasonic_cm;
-    telemetry.pumpActive = data.pump_status;
+    if (!isSimulationMode) {
+        telemetry.h2Ppm = data.mq2_ppm;
+        telemetry.waterLevelCm = data.ultrasonic_cm;
+        telemetry.pumpActive = data.pump_status;
 
-    h2History.shift();
-    h2History.push(telemetry.h2Ppm);
-
-    triggerGlow(elValH2);
-    triggerGlow(elValWater);
-    updateUI();
-    */
+        // Note: history update and UI update handled in 1s interval to keep sync,
+        // but can be forced here if immediate response is desired.
+    }
 });
 
 // Initial Render
