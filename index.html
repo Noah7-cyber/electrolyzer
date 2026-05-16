@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Electrolyzer Alpha-9</title>
 
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0a0a0a">
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -41,9 +45,6 @@
 
     <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-    <!-- Socket.io placeholder -->
-    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
     <div class="relative flex flex-col h-screen overflow-hidden bg-theme-bg text-theme-text-main font-mono">
@@ -139,9 +140,15 @@
             </aside>
 
             <!-- Canvas Render Area -->
-            <section class="bg-theme-bg relative flex justify-center items-center overflow-hidden min-h-0" style="background: radial-gradient(circle at center, #1a1a1a 0%, #0a0a0a 100%)">
+            <section class="bg-theme-bg relative flex justify-center items-center overflow-hidden min-h-[400px] lg:min-h-0" style="background: radial-gradient(circle at center, #1a1a1a 0%, #0a0a0a 100%)">
                 <div id="canvas-container" class="absolute inset-0 p-4">
                     <canvas id="tank-canvas" style="width: 100%; height: 100%; display: block;"></canvas>
+                </div>
+
+                <div id="dry-tank-warning" class="absolute inset-0 bg-black/80 flex flex-col items-center justify-center z-20 hidden">
+                    <i class="fa-solid fa-triangle-exclamation text-theme-red text-6xl mb-4 animate-pulse-glow"></i>
+                    <h2 class="text-theme-red text-2xl font-bold tracking-[2px] uppercase">System Fault</h2>
+                    <p class="text-theme-text-main mt-2 tracking-[1px]">DRY TANK DETECTED</p>
                 </div>
             </section>
 
@@ -165,17 +172,25 @@
                     <i class="fa-solid fa-water absolute right-4 bottom-4 text-4xl opacity-[0.03] text-theme-cyan"></i>
                 </div>
 
-                <!-- Pump Status -->
+                <!-- Electrical & Efficiency -->
                 <div class="bg-theme-card border border-theme-border p-4 rounded relative overflow-hidden flex flex-col justify-center min-h-[90px]">
                     <div class="text-[10px] text-theme-text-dim uppercase tracking-[1px] mb-2 flex justify-between items-center">
-                        Pump Status
-                        <i id="pump-icon" class="fa-solid fa-fan text-theme-text-dim"></i>
+                        Electrical & Efficiency
+                        <i class="fa-solid fa-bolt text-theme-text-dim"></i>
                     </div>
-                    <div class="text-2xl font-bold text-theme-text-dim" id="val-pump">
-                        Idle
-                    </div>
-                    <div class="mt-2">
-                        <button id="btn-trigger-pump" class="elegant-button secondary w-full text-[10px] py-1">Trigger Pump</button>
+                    <div class="flex justify-between items-end mt-1">
+                        <div>
+                            <div class="text-[10px] text-theme-text-dim mb-1">Assumed Current</div>
+                            <div class="text-xl font-bold text-theme-amber" id="val-amps">
+                                0.00 <span class="text-[12px] text-theme-text-dim font-normal">A</span>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-[10px] text-theme-text-dim mb-1">Efficiency</div>
+                            <div class="text-xl font-bold text-theme-cyan" id="val-efficiency">
+                                0 <span class="text-[12px] text-theme-text-dim font-normal">%</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -226,5 +241,18 @@
 
     <!-- Main Logic -->
     <script src="script.js"></script>
+
+    <!-- PWA Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').then(registration => {
+                    console.log('SW registered: ', registration);
+                }).catch(registrationError => {
+                    console.log('SW registration failed: ', registrationError);
+                });
+            });
+        }
+    </script>
 </body>
 </html>
