@@ -57,44 +57,26 @@ let bakingSodaRunTime = 0; // seconds
 const maxHistoryPoints = 60;
 let h2History = Array.from({ length: maxHistoryPoints }, () => 0);
 
-// WebSocket
-let ws = null;
+// --- HTTP Polling for Live Telemetry ---
+let pollingInterval = null;
 
-function setupWebSocket() {
-    const wsUrl = `ws://${window.location.hostname}:81/`;
-    try {
-        ws = new WebSocket(wsUrl);
+function fetchLiveTelemetry() {
+    if (isSimulationMode) return;
 
-        ws.onopen = () => {
-            addSystemMessage('WEBSOCKET CONNECTED');
-        };
-
-        ws.onmessage = (event) => {
-            if (isSimulationMode) return; // Ignore live data if simulating
-            try {
-                const data = JSON.parse(event.data);
-                if (data.h2 !== undefined) {
-                    telemetry.h2Ppm = data.h2;
-                }
-            } catch (e) {
-                console.error("Failed to parse WS data", e);
+    fetch('/api/telemetry')
+        .then(res => res.json())
+        .then(data => {
+            if (!isSimulationMode && data.h2 !== undefined) {
+                telemetry.h2Ppm = parseFloat(data.h2);
             }
-        };
-
-        ws.onclose = () => {
-            addSystemMessage('WEBSOCKET DISCONNECTED. RECONNECTING...');
-            setTimeout(setupWebSocket, 5000);
-        };
-
-        ws.onerror = (err) => {
-            console.error('WebSocket Error', err);
-        };
-    } catch (e) {
-        addSystemMessage('WEBSOCKET INIT FAILED');
-    }
+        })
+        .catch(err => {
+            // Silently fail or log, don't spam UI
+        });
 }
-// Init WS
-setupWebSocket();
+
+// Start polling
+pollingInterval = setInterval(fetchLiveTelemetry, 1000);
 
 // --- Utilities ---
 function formatUptime(seconds) {
@@ -207,11 +189,24 @@ function updateUI() {
     elPwmSlider.value = currentPwm;
 
     // Telemetry Values
-    elValH2.innerHTML = `${telemetry.h2Ppm.toFixed(1)} <span class="text-[14px] text-theme-text-dim ml-1 font-normal">PPM</span>`;
+    if (!isSimulationMode) {
+        if (telemetry.h2Ppm === 0 && h2PpmHistory10s.length <= 1) {
+             elValH2.innerHTML = `WAITING... <span class="text-[14px] text-theme-text-dim ml-1 font-normal">PPM</span>`;
+        } else {
+             elValH2.innerHTML = `${telemetry.h2Ppm.toFixed(1)} <span class="text-[14px] text-theme-text-dim ml-1 font-normal">PPM</span>`;
+        }
+    } else {
+        elValH2.innerHTML = `${telemetry.h2Ppm.toFixed(1)} <span class="text-[14px] text-theme-text-dim ml-1 font-normal">PPM</span>`;
+    }
 
     // Electrical Metrics
-    elValAmps.innerHTML = `${assumedAmps.toFixed(2)} <span class="text-[12px] text-theme-text-dim font-normal">A</span>`;
-    elValEfficiency.innerHTML = `${systemEfficiency.toFixed(0)} <span class="text-[12px] text-theme-text-dim font-normal">%</span>`;
+    if (!isSimulationMode && assumedAmps === 0 && systemEfficiency === 0) {
+         elValAmps.innerHTML = `WAITING... <span class="text-[12px] text-theme-text-dim font-normal">A</span>`;
+         elValEfficiency.innerHTML = `WAITING... <span class="text-[12px] text-theme-text-dim font-normal">%</span>`;
+    } else {
+         elValAmps.innerHTML = `${assumedAmps.toFixed(2)} <span class="text-[12px] text-theme-text-dim font-normal">A</span>`;
+         elValEfficiency.innerHTML = `${systemEfficiency.toFixed(0)} <span class="text-[12px] text-theme-text-dim font-normal">%</span>`;
+    }
 
     // Mode Toggle Styling
     if (isSimulationMode) {
@@ -237,22 +232,30 @@ function updateUI() {
     }
 
     // Water Logic
-    let waterStatus = telemetry.waterLevelCm > 8 ? 'Safe' : 'Low';
-    let waterColorClass = telemetry.waterLevelCm > 8 ? 'text-theme-cyan' : 'text-theme-red';
-
-    if (telemetry.waterLevelCm <= 0) {
-        waterStatus = 'DRY';
-        waterColorClass = 'text-theme-red animate-pulse-glow';
-    }
-
-    elValWater.className = `text-2xl font-bold ${waterColorClass}`;
-    elValWater.innerHTML = `${waterStatus} <span class="text-[14px] text-theme-text-dim ml-1 font-normal" id="val-water-cm">(${telemetry.waterLevelCm.toFixed(1)} CM)</span>`;
-
-    // Dry Tank Warning UI
-    if (telemetry.waterLevelCm <= 0 && isRunning) {
-        elDryTankWarning.classList.remove('hidden');
-    } else {
+    if (!isSimulationMode) {
+        elValWater.className = `text-lg font-bold text-theme-text-dim`;
+        elValWater.innerHTML = `N/A <span class="text-[10px] text-theme-text-dim ml-1 font-normal" id="val-water-cm">(SENSOR DISCONNECTED)</span>`;
         elDryTankWarning.classList.add('hidden');
+    } else {
+        let waterStatus = telemetry.waterLevelCm > 8 ? 'Safe' : 'Low';
+        let waterColorClass = telemetry.waterLevelCm > 8 ? 'text-theme-cyan' : 'text-theme-red';
+
+        if (telemetry.waterLevelCm <= 0) {
+            waterStatus = 'DRY';
+            waterColorClass = 'text-theme-red animate-pulse-glow';
+        }
+
+        elValWater.className = `text-2xl font-bold ${waterColorClass}`;
+        elValWater.innerHTML = `${waterStatus} <span class="text-[14px] text-theme-text-dim ml-1 font-normal" id="val-water-cm">(${telemetry.waterLevelCm.toFixed(1)} CM)</span>`;
+
+        // Dry Tank Warning UI
+        if (telemetry.waterLevelCm <= 0 && isRunning) {
+            elDryTankWarning.classList.remove('hidden');
+            elPwmSlider.disabled = true; // Lock UI
+        } else {
+            elDryTankWarning.classList.add('hidden');
+            if (isRunning) elPwmSlider.disabled = false;
+        }
     }
 
     // Chart
@@ -386,9 +389,9 @@ function drawCanvas() {
         // Bubble density tied to Amperage in Simulation, PWM in Live
         let spawnMultiplier = 0;
         if (isSimulationMode) {
-            // Tie to theoretical current. High efficiency might yield ~10-20 amps.
-            // Cap visual scaling around 20 amps for sanity.
-            spawnMultiplier = Math.min(20, currentSimulationAmps) / 5; // e.g. 10 Amps = 2.0 multiplier
+            // Tie to theoretical current. ~3.36 amps is heavy bubbling now.
+            // Map 0-5 amps roughly to 0-3 visual spawn multiplier
+            spawnMultiplier = Math.min(10, currentSimulationAmps) * 0.8;
         } else {
             spawnMultiplier = (currentPwm / 100) * 2;
         }
@@ -458,9 +461,6 @@ btnStop.addEventListener('click', () => {
     isRunning = false;
     currentPwm = 0;
     addSystemMessage('EMERGENCY STOP ENGAGED');
-    if (ws && ws.readyState === WebSocket.OPEN && !isSimulationMode) {
-        ws.send(JSON.stringify({pwm: currentPwm}));
-    }
     updateUI();
 });
 
@@ -468,15 +468,29 @@ elPwmSlider.addEventListener('input', (e) => {
     currentPwm = parseInt(e.target.value);
     elPwmDisplay.innerText = `${currentPwm}%`;
     addSystemMessage(`PWM ADJUSTED TO ${currentPwm}%`);
-    if (ws && ws.readyState === WebSocket.OPEN && !isSimulationMode) {
-        ws.send(JSON.stringify({pwm: currentPwm}));
-    }
 });
+
+// Reset simulation fault
+function checkSimReset() {
+    if (isSimulationMode && telemetry.waterLevelCm <= 0) {
+        telemetry.waterLevelCm = 20;
+        telemetry.totalH2mL = 0; // also reset gas
+        addSystemMessage('SIMULATION PARAMETER CHANGED. TANK REFILLED.');
+        updateUI();
+    }
+}
 
 // Mode Buttons
 btnModeLive.addEventListener('click', () => {
     if (isSimulationMode) {
         isSimulationMode = false;
+        // Wipe everything
+        telemetry.h2Ppm = 0;
+        telemetry.totalH2mL = 0;
+        assumedAmps = 0;
+        systemEfficiency = 0;
+        h2PpmHistory10s = [];
+        h2History = Array.from({ length: maxHistoryPoints }, () => 0);
         addSystemMessage('SWITCHED TO LIVE TELEMETRY MODE');
         updateUI();
     }
@@ -485,6 +499,7 @@ btnModeLive.addEventListener('click', () => {
 btnModeSim.addEventListener('click', () => {
     if (!isSimulationMode) {
         isSimulationMode = true;
+        telemetry.waterLevelCm = 20; // Ensure tank has water
         addSystemMessage('SWITCHED TO SIMULATION MODE');
         updateUI();
     }
@@ -492,11 +507,16 @@ btnModeSim.addEventListener('click', () => {
 
 simDistance.addEventListener('input', (e) => {
     simDistanceDisplay.innerText = `${e.target.value} cm`;
+    checkSimReset();
 });
 
 simElectrolyte.addEventListener('change', () => {
-    // Reset degradation when changed
     bakingSodaRunTime = 0;
+    checkSimReset();
+});
+
+simMaterial.addEventListener('change', () => {
+    checkSimReset();
 });
 
 
@@ -509,7 +529,7 @@ setInterval(() => {
 
 // --- Simulation Physics Engine & Logic Loop ---
 const CONSTANTS = {
-    voltage: 12.0,
+    voltage: 16.8, // 4S BMS system
     yieldMlPerAmpMin: 7.5,
     containerVolumeMl: 5000,
     ventLeakPpmPerSec: 50,
@@ -517,6 +537,7 @@ const CONSTANTS = {
     conductivities: {
         'distilled': 0.01,
         'baking_soda': 0.4,
+        'naoh': 0.8,
         'koh': 1.0
     },
 
@@ -588,9 +609,7 @@ setInterval(() => {
     } else {
         // --- LIVE TELEMETRY MODE ---
         currentSimulationAmps = 0;
-        // In reality, this data would come from Socket.io.
-        // For visual sake of the dashboard when no data is arriving, slowly vent
-        telemetry.h2Ppm = Math.max(0, telemetry.h2Ppm - CONSTANTS.ventLeakPpmPerSec);
+        // Data comes from polling the backend now.
     }
 
     // Common logic (history, math, UI)
