@@ -83,7 +83,7 @@
             </div>
         </header>
 
-        <main class="flex-1 grid grid-cols-1 lg:grid-cols-[240px_1fr_240px] gap-[1px] bg-theme-border overflow-hidden min-h-0 z-10">
+        <main class="flex-1 grid grid-cols-1 lg:grid-cols-[240px_1fr_240px] gap-[1px] bg-theme-border overflow-y-auto lg:overflow-hidden min-h-0 z-10">
             <!-- Left Sidebar -->
             <aside class="bg-theme-panel p-5 flex flex-col gap-5 overflow-y-auto min-h-0">
                 <div id="live-power-cards" class="flex flex-col gap-5">
@@ -111,6 +111,7 @@
                         <select id="sim-electrolyte" class="elegant-select w-full bg-theme-bg border border-theme-border text-theme-text-main p-2 text-[12px] outline-none focus:border-theme-cyan">
                             <option value="distilled">Distilled Water (0.01x)</option>
                             <option value="baking_soda">Baking Soda (0.4x)</option>
+                            <option value="naoh">NaOH (0.8x)</option>
                             <option value="koh">KOH (1.0x - Optimal)</option>
                         </select>
                     </div>
@@ -178,18 +179,20 @@
                         Electrical & Efficiency
                         <i class="fa-solid fa-bolt text-theme-text-dim"></i>
                     </div>
-                    <div class="flex justify-between items-end mt-1">
-                        <div>
+                    <div class="flex justify-between items-start mt-1">
+                        <div class="flex flex-col">
                             <div class="text-[10px] text-theme-text-dim mb-1">Assumed Current</div>
                             <div class="text-xl font-bold text-theme-amber" id="val-amps">
                                 0.00 <span class="text-[12px] text-theme-text-dim font-normal">A</span>
                             </div>
+                            <div class="text-[8px] text-theme-text-dim mt-1 opacity-50">Formula: Amps = H2_mL_per_min / 7.46</div>
                         </div>
-                        <div class="text-right">
+                        <div class="text-right flex flex-col items-end">
                             <div class="text-[10px] text-theme-text-dim mb-1">Efficiency</div>
                             <div class="text-xl font-bold text-theme-cyan" id="val-efficiency">
                                 0 <span class="text-[12px] text-theme-text-dim font-normal">%</span>
                             </div>
+                            <div class="text-[8px] text-theme-text-dim mt-1 opacity-50">Formula: (Actual_H2 / Theoretical_Max) * 100</div>
                         </div>
                     </div>
                 </div>
