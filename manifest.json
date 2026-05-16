@@ -1,0 +1,16 @@
+{
+  "name": "Electrolyzer Alpha-9",
+  "short_name": "Alpha-9",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "description": "Industrial Telemetry Node Dashboard",
+  "icons": [
+    {
+      "src": "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/svgs/solid/droplet.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    }
+  ]
+}

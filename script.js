@@ -18,15 +18,15 @@ const simDistanceDisplay = document.getElementById('sim-distance-display');
 const elValH2 = document.getElementById('val-h2');
 const elValWater = document.getElementById('val-water');
 const elValWaterCm = document.getElementById('val-water-cm');
-const elValPump = document.getElementById('val-pump');
-const elPumpIcon = document.getElementById('pump-icon');
+const elValAmps = document.getElementById('val-amps');
+const elValEfficiency = document.getElementById('val-efficiency');
 const elSystemMessages = document.getElementById('system-messages');
+const elDryTankWarning = document.getElementById('dry-tank-warning');
 
 const elPwmSlider = document.getElementById('pwm-slider');
 const elPwmDisplay = document.getElementById('pwm-display');
 const btnStart = document.getElementById('btn-start');
 const btnStop = document.getElementById('btn-stop');
-const btnTriggerPump = document.getElementById('btn-trigger-pump');
 
 const canvas = document.getElementById('tank-canvas');
 const ctx = canvas.getContext('2d');
@@ -42,10 +42,13 @@ let uptimeInterval = null;
 let telemetry = {
     h2Ppm: 0,
     waterLevelCm: 20, // Max safe is 20, Low is < 8
-    pumpActive: false,
-    manualPumpOverride: false,
     totalH2mL: 0 // Track total H2 produced
 };
+
+// Electrical state
+let assumedAmps = 0;
+let systemEfficiency = 0;
+let h2PpmHistory10s = []; // Array of {time, ppm}
 
 // Simulation State
 let bakingSodaRunTime = 0; // seconds
@@ -53,6 +56,45 @@ let bakingSodaRunTime = 0; // seconds
 // History for Chart
 const maxHistoryPoints = 60;
 let h2History = Array.from({ length: maxHistoryPoints }, () => 0);
+
+// WebSocket
+let ws = null;
+
+function setupWebSocket() {
+    const wsUrl = `ws://${window.location.hostname}:81/`;
+    try {
+        ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            addSystemMessage('WEBSOCKET CONNECTED');
+        };
+
+        ws.onmessage = (event) => {
+            if (isSimulationMode) return; // Ignore live data if simulating
+            try {
+                const data = JSON.parse(event.data);
+                if (data.h2 !== undefined) {
+                    telemetry.h2Ppm = data.h2;
+                }
+            } catch (e) {
+                console.error("Failed to parse WS data", e);
+            }
+        };
+
+        ws.onclose = () => {
+            addSystemMessage('WEBSOCKET DISCONNECTED. RECONNECTING...');
+            setTimeout(setupWebSocket, 5000);
+        };
+
+        ws.onerror = (err) => {
+            console.error('WebSocket Error', err);
+        };
+    } catch (e) {
+        addSystemMessage('WEBSOCKET INIT FAILED');
+    }
+}
+// Init WS
+setupWebSocket();
 
 // --- Utilities ---
 function formatUptime(seconds) {
@@ -167,6 +209,10 @@ function updateUI() {
     // Telemetry Values
     elValH2.innerHTML = `${telemetry.h2Ppm.toFixed(1)} <span class="text-[14px] text-theme-text-dim ml-1 font-normal">PPM</span>`;
 
+    // Electrical Metrics
+    elValAmps.innerHTML = `${assumedAmps.toFixed(2)} <span class="text-[12px] text-theme-text-dim font-normal">A</span>`;
+    elValEfficiency.innerHTML = `${systemEfficiency.toFixed(0)} <span class="text-[12px] text-theme-text-dim font-normal">%</span>`;
+
     // Mode Toggle Styling
     if (isSimulationMode) {
         btnModeSim.className = 'px-4 py-1 text-[12px] uppercase font-bold tracking-[1px] transition-colors duration-200 bg-theme-cyan text-black';
@@ -194,18 +240,19 @@ function updateUI() {
     let waterStatus = telemetry.waterLevelCm > 8 ? 'Safe' : 'Low';
     let waterColorClass = telemetry.waterLevelCm > 8 ? 'text-theme-cyan' : 'text-theme-red';
 
+    if (telemetry.waterLevelCm <= 0) {
+        waterStatus = 'DRY';
+        waterColorClass = 'text-theme-red animate-pulse-glow';
+    }
+
     elValWater.className = `text-2xl font-bold ${waterColorClass}`;
     elValWater.innerHTML = `${waterStatus} <span class="text-[14px] text-theme-text-dim ml-1 font-normal" id="val-water-cm">(${telemetry.waterLevelCm.toFixed(1)} CM)</span>`;
 
-    // Pump Logic
-    if (telemetry.pumpActive || telemetry.manualPumpOverride) {
-        elValPump.className = `text-2xl font-bold text-theme-cyan`;
-        elValPump.innerText = 'Active';
-        elPumpIcon.className = `fa-solid fa-fan text-theme-cyan animate-spin-fast`;
+    // Dry Tank Warning UI
+    if (telemetry.waterLevelCm <= 0 && isRunning) {
+        elDryTankWarning.classList.remove('hidden');
     } else {
-        elValPump.className = `text-2xl font-bold text-theme-text-dim`;
-        elValPump.innerText = 'Idle';
-        elPumpIcon.className = `fa-solid fa-fan text-theme-text-dim`;
+        elDryTankWarning.classList.add('hidden');
     }
 
     // Chart
@@ -411,6 +458,9 @@ btnStop.addEventListener('click', () => {
     isRunning = false;
     currentPwm = 0;
     addSystemMessage('EMERGENCY STOP ENGAGED');
+    if (ws && ws.readyState === WebSocket.OPEN && !isSimulationMode) {
+        ws.send(JSON.stringify({pwm: currentPwm}));
+    }
     updateUI();
 });
 
@@ -418,21 +468,9 @@ elPwmSlider.addEventListener('input', (e) => {
     currentPwm = parseInt(e.target.value);
     elPwmDisplay.innerText = `${currentPwm}%`;
     addSystemMessage(`PWM ADJUSTED TO ${currentPwm}%`);
-});
-
-btnTriggerPump.addEventListener('mousedown', () => {
-    telemetry.manualPumpOverride = true;
-    addSystemMessage('MANUAL PUMP OVERRIDE ACTIVE');
-    updateUI();
-});
-
-btnTriggerPump.addEventListener('mouseup', () => {
-    telemetry.manualPumpOverride = false;
-    addSystemMessage('MANUAL PUMP OVERRIDE RELEASED');
-    updateUI();
-});
-btnTriggerPump.addEventListener('mouseleave', () => {
-    telemetry.manualPumpOverride = false;
+    if (ws && ws.readyState === WebSocket.OPEN && !isSimulationMode) {
+        ws.send(JSON.stringify({pwm: currentPwm}));
+    }
 });
 
 // Mode Buttons
@@ -494,6 +532,15 @@ let currentSimulationAmps = 0;
 setInterval(() => {
     if (isSimulationMode) {
         // --- SIMULATION MODE ---
+
+        // Handle dry tank override
+        if (telemetry.waterLevelCm <= 0 && isRunning) {
+            currentPwm = 0;
+            if (currentSimulationAmps > 0) {
+                addSystemMessage('SYSTEM FAULT: DRY TANK');
+            }
+        }
+
         let currentDraw = 0;
 
         if (isRunning && currentPwm > 0 && telemetry.waterLevelCm > 0) {
@@ -546,19 +593,60 @@ setInterval(() => {
         telemetry.h2Ppm = Math.max(0, telemetry.h2Ppm - CONSTANTS.ventLeakPpmPerSec);
     }
 
-    // Common logic (Pump, history, UI)
+    // Common logic (history, math, UI)
 
-    // Simulate Pump logic (Auto refill if low, or manual override)
-    if (telemetry.waterLevelCm < 8) {
-        if (!telemetry.pumpActive) addSystemMessage('WATER LOW: AUTO-PUMP ENGAGED');
-        telemetry.pumpActive = true;
-    } else if (telemetry.waterLevelCm > 18 && telemetry.pumpActive) {
-        telemetry.pumpActive = false;
-        addSystemMessage('WATER SAFE: AUTO-PUMP DISENGAGED');
+    // Calculate Rate of Change (H2_mL_per_min) over a 10s rolling window
+    const now = Date.now();
+    h2PpmHistory10s.push({time: now, ppm: telemetry.h2Ppm});
+    // Remove entries older than 10 seconds
+    h2PpmHistory10s = h2PpmHistory10s.filter(entry => (now - entry.time) <= 10000);
+
+    let currentH2MlPerMin = 0;
+    if (h2PpmHistory10s.length > 1) {
+        const oldest = h2PpmHistory10s[0];
+        const newest = h2PpmHistory10s[h2PpmHistory10s.length - 1];
+        const timeDiffSec = (newest.time - oldest.time) / 1000;
+
+        if (timeDiffSec > 0) {
+            // PPM change over the window
+            const ppmDelta = newest.ppm - oldest.ppm;
+
+            // Account for vent leak in the delta calculation to get true production
+            // If we didn't produce anything, the delta would be exactly -ventLeak over time.
+            // True Delta = Observed Delta + Vent Leak over that time
+            const ventLoss = CONSTANTS.ventLeakPpmPerSec * timeDiffSec;
+            const truePpmDelta = ppmDelta + ventLoss;
+
+            // Convert true PPM delta back to mL
+            const deltaMl = (truePpmDelta * CONSTANTS.containerVolumeMl) / 1000000;
+
+            // Calculate rate per minute
+            currentH2MlPerMin = (deltaMl / timeDiffSec) * 60;
+        }
     }
 
-    if (telemetry.pumpActive || telemetry.manualPumpOverride) {
-        telemetry.waterLevelCm += 0.5; // Fill speed
+    // Clamp to 0
+    currentH2MlPerMin = Math.max(0, currentH2MlPerMin);
+
+    // Formula: Amps = H2_mL_per_min / 7.46
+    assumedAmps = currentH2MlPerMin / 7.46;
+
+    // Calculate Efficiency
+    if (currentPwm > 0 && isRunning && telemetry.waterLevelCm > 0) {
+        // Theoretical max assumes perfect conditions (Platinum, 1cm distance, KOH)
+        const perfectResistance = (CONSTANTS.materials['platinum'] * 1) / CONSTANTS.conductivities['koh']; // 0.1
+        const maxAmps = (CONSTANTS.voltage / perfectResistance) * (currentPwm / 100);
+        const maxH2MlPerMin = maxAmps * 7.46;
+
+        if (maxH2MlPerMin > 0) {
+            systemEfficiency = (currentH2MlPerMin / maxH2MlPerMin) * 100;
+            systemEfficiency = Math.min(100, Math.max(0, systemEfficiency)); // Clamp 0-100
+        } else {
+            systemEfficiency = 0;
+        }
+    } else {
+        systemEfficiency = 0;
+        assumedAmps = 0; // Force to 0 if not running
     }
 
     // Clamp water level
@@ -576,21 +664,6 @@ setInterval(() => {
     updateUI();
 
 }, 1000);
-
-// Setup Socket.io placeholder
-const socket = io();
-
-// Example Socket.io Listener for Real Data
-socket.on('telemetry', (data) => {
-    if (!isSimulationMode) {
-        telemetry.h2Ppm = data.mq2_ppm;
-        telemetry.waterLevelCm = data.ultrasonic_cm;
-        telemetry.pumpActive = data.pump_status;
-
-        // Note: history update and UI update handled in 1s interval to keep sync,
-        // but can be forced here if immediate response is desired.
-    }
-});
 
 // Initial Render
 updateUI();
