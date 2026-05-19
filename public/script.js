@@ -571,6 +571,14 @@ const CONSTANTS = {
         'platinum': 0.1,
         'graphite': 1.0,
         'pencil': 1.5 // Dramatically lowered from 5.0
+    },
+
+    // Faraday Efficiency Factor (0.0 to 1.0)
+    // Pencil lead wastes immense energy to heat and breaking down the clay/graphite binder
+    materialEfficiency: {
+        'platinum': 1.0,
+        'graphite': 0.5,
+        'pencil': 0.05
     }
 };
 
@@ -617,9 +625,12 @@ setInterval(() => {
 
         currentSimulationAmps = currentDraw;
 
-        // H2 Production (mL/min) = Amperage * 7.5
-        // Per second: (Amperage * 7.5) / 60
-        const h2MlPerSec = (currentDraw * CONSTANTS.yieldMlPerAmpMin) / 60;
+        // Apply intrinsic material efficiency (e.g. pencil wastes 95% of energy)
+        const matEfficiency = CONSTANTS.materialEfficiency[simMaterial.value];
+
+        // H2 Production (mL/min) = Amperage * 7.5 * efficiency
+        // Per second: (Amperage * 7.5 * efficiency) / 60
+        const h2MlPerSec = (currentDraw * CONSTANTS.yieldMlPerAmpMin * matEfficiency) / 60;
         telemetry.totalH2mL += h2MlPerSec;
 
         // Convert total H2 volume to PPM in 5000mL container
