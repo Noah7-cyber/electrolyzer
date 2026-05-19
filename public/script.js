@@ -174,7 +174,7 @@ function updateUI() {
         elSystemStatusIndicator.classList.add('bg-theme-red', 'animate-pulse-glow');
         elSystemStatusText.innerText = 'System Armed';
         elSystemOfflineWarning.style.display = 'none';
-        elPwmSlider.disabled = false;
+        if (isSimulationMode) elPwmSlider.disabled = false;
     } else {
         elSystemStatusBadge.classList.add('text-theme-cyan', 'border-theme-cyan');
         elSystemStatusBadge.classList.remove('text-theme-red', 'border-theme-red');
@@ -187,6 +187,21 @@ function updateUI() {
 
     elPwmDisplay.innerText = `${currentPwm}%`;
     elPwmSlider.value = currentPwm;
+
+    // Controls for Live Mode
+    if (!isSimulationMode) {
+        elPwmSlider.disabled = true;
+        btnStart.disabled = true;
+        btnStop.disabled = true;
+        btnStart.classList.add('opacity-50', 'cursor-not-allowed');
+        btnStop.classList.add('opacity-50', 'cursor-not-allowed');
+        elSystemOfflineWarning.style.display = 'none'; // Not relevant in Live Mode Monitoring
+    } else {
+        btnStart.disabled = false;
+        btnStop.disabled = false;
+        btnStart.classList.remove('opacity-50', 'cursor-not-allowed');
+        btnStop.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
 
     // Telemetry Values
     if (!isSimulationMode) {
@@ -385,20 +400,31 @@ function drawCanvas() {
         });
     };
 
-    if (isRunning && currentPwm > 0 && telemetry.waterLevelCm > 5) { // Needs water to bubble
-        // Bubble density tied to Amperage in Simulation, PWM in Live
-        let spawnMultiplier = 0;
-        if (isSimulationMode) {
+    let shouldBubble = false;
+    let spawnMultiplier = 0;
+
+    if (isSimulationMode) {
+        if (isRunning && currentPwm > 0 && telemetry.waterLevelCm > 5) { // Needs water to bubble
+            shouldBubble = true;
             // Tie to theoretical current. ~3.36 amps is heavy bubbling now.
             // Map 0-5 amps roughly to 0-3 visual spawn multiplier
             spawnMultiplier = Math.min(10, currentSimulationAmps) * 0.8;
-        } else {
-            spawnMultiplier = (currentPwm / 100) * 2;
+
+            // Ensure some bubbles if running but low efficiency
+            if (spawnMultiplier < 0.1) spawnMultiplier = 0.1;
         }
+    } else {
+        // Live Mode bubbling depends entirely on sensor data
+        if (telemetry.h2Ppm > 0) {
+            shouldBubble = true;
+            // Dynamic bubbling scale based on PPM value
+            // 0-100+ PPM roughly mapped to multiplier
+            spawnMultiplier = Math.min(10, (telemetry.h2Ppm / 20));
+            if (spawnMultiplier < 0.2) spawnMultiplier = 0.2; // minimum bubbling threshold when producing
+        }
+    }
 
-        // Ensure some bubbles if running but low efficiency
-        if (spawnMultiplier < 0.1) spawnMultiplier = 0.1;
-
+    if (shouldBubble) {
         // Hydrogen (Cathode)
         const h2Rate = spawnMultiplier * 3;
         for(let i=0; i<Math.floor(h2Rate); i++) spawnBubble(false);
@@ -544,7 +570,7 @@ const CONSTANTS = {
     materials: {
         'platinum': 0.1,
         'graphite': 1.0,
-        'pencil': 5.0
+        'pencil': 1.5 // Dramatically lowered from 5.0
     }
 };
 
@@ -578,10 +604,11 @@ setInterval(() => {
                 conductivity *= degradationFactor;
             }
 
-            // Calculate Total Resistance: (Material Resistance * Distance) / Conductivity
-            const totalResistance = (materialRes * distanceCm) / conductivity;
+            // Calculate Total Resistance: Flattened distance effect so it still reacts at a distance.
+            const distanceFactor = 0.2 + (distanceCm * 0.08);
+            const totalResistance = (materialRes * distanceFactor) / conductivity;
 
-            // Calculate Amperage: (12V / Total Resistance) * (PWM / 100)
+            // Calculate Amperage: (16.8V / Total Resistance) * (PWM / 100)
             currentDraw = (CONSTANTS.voltage / totalResistance) * (currentPwm / 100);
 
             // Water consumes slowly proportional to amperage
@@ -651,10 +678,27 @@ setInterval(() => {
     assumedAmps = currentH2MlPerMin / 7.46;
 
     // Calculate Efficiency
-    if (currentPwm > 0 && isRunning && telemetry.waterLevelCm > 0) {
-        // Theoretical max assumes perfect conditions (Platinum, 1cm distance, KOH)
+    if (isSimulationMode) {
+        if (currentPwm > 0 && isRunning && telemetry.waterLevelCm > 0) {
+            // Theoretical max assumes perfect conditions (Platinum, 1cm distance, KOH)
+            const perfectResistance = (CONSTANTS.materials['platinum'] * 1) / CONSTANTS.conductivities['koh']; // 0.1
+            const maxAmps = (CONSTANTS.voltage / perfectResistance) * (currentPwm / 100);
+            const maxH2MlPerMin = maxAmps * 7.46;
+
+            if (maxH2MlPerMin > 0) {
+                systemEfficiency = (currentH2MlPerMin / maxH2MlPerMin) * 100;
+                systemEfficiency = Math.min(100, Math.max(0, systemEfficiency)); // Clamp 0-100
+            } else {
+                systemEfficiency = 0;
+            }
+        } else {
+            systemEfficiency = 0;
+            assumedAmps = 0; // Force to 0 if not running
+        }
+    } else {
+        // LIVE MODE - Dashboard controls disabled, assumes 100% PWM always running
         const perfectResistance = (CONSTANTS.materials['platinum'] * 1) / CONSTANTS.conductivities['koh']; // 0.1
-        const maxAmps = (CONSTANTS.voltage / perfectResistance) * (currentPwm / 100);
+        const maxAmps = (CONSTANTS.voltage / perfectResistance) * 1.0; // 100% PWM
         const maxH2MlPerMin = maxAmps * 7.46;
 
         if (maxH2MlPerMin > 0) {
@@ -663,9 +707,6 @@ setInterval(() => {
         } else {
             systemEfficiency = 0;
         }
-    } else {
-        systemEfficiency = 0;
-        assumedAmps = 0; // Force to 0 if not running
     }
 
     // Clamp water level
