@@ -128,6 +128,11 @@ const h2Chart = new Chart(ctxChart, {
     options: {
         responsive: true,
         maintainAspectRatio: false,
+        layout: {
+            padding: {
+                bottom: 10
+            }
+        },
         animation: {
             duration: 0 // Disable animation for performance
         },
@@ -517,6 +522,7 @@ btnModeLive.addEventListener('click', () => {
         systemEfficiency = 0;
         h2PpmHistory10s = [];
         h2History = Array.from({ length: maxHistoryPoints }, () => 0);
+        h2Chart.options.scales.y.max = 150;
         addSystemMessage('SWITCHED TO LIVE TELEMETRY MODE');
         updateUI();
     }
@@ -526,6 +532,7 @@ btnModeSim.addEventListener('click', () => {
     if (!isSimulationMode) {
         isSimulationMode = true;
         telemetry.waterLevelCm = 20; // Ensure tank has water
+        h2Chart.options.scales.y.max = 160;
         addSystemMessage('SWITCHED TO SIMULATION MODE');
         updateUI();
     }
