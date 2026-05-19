@@ -304,19 +304,30 @@ function drawCanvas() {
 
     ctx.clearRect(0, 0, w, h);
 
-    // Baking Soda Murky Water Logic
+    // Dynamic Chemical Degradation Water Visuals
     let waterColorTank = 'rgba(0, 100, 255, 0.08)';
     let waterColorFluid = 'rgba(0, 150, 255, 0.15)';
 
-    if (isSimulationMode && simElectrolyte.value === 'baking_soda') {
-        const degradationPct = Math.min(1, bakingSodaRunTime / 120);
-        // Transition from blue to murky greenish-brown
-        // Clear Blue: (0, 150, 255) -> Murky: (100, 120, 50)
-        const r = Math.floor(0 + (100 - 0) * degradationPct);
-        const g = Math.floor(150 + (120 - 150) * degradationPct);
-        const b = Math.floor(255 + (50 - 255) * degradationPct);
+    if (isSimulationMode && materialHealth < 1.0) {
+        const degradationPct = 1.0 - materialHealth; // 0.0 to 1.0
+        let r, g, b;
+
+        if (simElectrolyte.value === 'baking_soda') {
+            // Transition from blue to murky greenish-brown
+            // Clear Blue: (0, 150, 255) -> Murky: (100, 120, 50)
+            r = Math.floor(0 + (100 - 0) * degradationPct);
+            g = Math.floor(150 + (120 - 150) * degradationPct);
+            b = Math.floor(255 + (50 - 255) * degradationPct);
+        } else {
+            // KOH/NaOH with graphite -> turns completely pitch black/grey
+            // Clear Blue: (0, 150, 255) -> Black: (20, 20, 20)
+            r = Math.floor(0 + (20 - 0) * degradationPct);
+            g = Math.floor(150 + (20 - 150) * degradationPct);
+            b = Math.floor(255 + (20 - 255) * degradationPct);
+        }
+
         const a1 = 0.08 + (0.4 - 0.08) * degradationPct; // Make less transparent
-        const a2 = 0.15 + (0.5 - 0.15) * degradationPct;
+        const a2 = 0.15 + (0.6 - 0.15) * degradationPct;
 
         waterColorTank = `rgba(${r}, ${g}, ${b}, ${a1})`;
         waterColorFluid = `rgba(${r}, ${g}, ${b}, ${a2})`;
@@ -506,6 +517,9 @@ function checkSimReset() {
     if (isSimulationMode && telemetry.waterLevelCm <= 0) {
         telemetry.waterLevelCm = 20;
         telemetry.totalH2mL = 0; // also reset gas
+        telemetry.h2Ppm = 0;
+        temperatureCelsius = 25.0; // Reset heat
+        materialHealth = 1.0; // Reset degradation
         addSystemMessage('SIMULATION PARAMETER CHANGED. TANK REFILLED.');
         updateUI();
     }
@@ -563,9 +577,15 @@ setInterval(() => {
 // --- Simulation Physics Engine & Logic Loop ---
 const CONSTANTS = {
     voltage: 16.8, // 4S BMS system
+    activationVoltage: 1.48, // Thermoneutral voltage needed to split water
     yieldMlPerAmpMin: 7.5,
-    containerVolumeMl: 5000,
-    ventLeakPpmPerSec: 50,
+    containerVolumeMl: 5000, // Total system volume
+    headspaceVolumeMl: 1000, // Volume for gas diffusion
+    escapeFactor: 0.1, // Proportion of gas that escapes the vents per second
+
+    // Thermodynamics
+    heatCapacityWater: 4184 * 5, // J/°C for 5L water roughly
+    heatSimulationMultiplier: 250, // Artificial speedup for simulation feel
 
     conductivities: {
         'distilled': 0.01,
@@ -577,19 +597,20 @@ const CONSTANTS = {
     materials: {
         'platinum': 0.1,
         'graphite': 1.0,
-        'pencil': 1.5 // Dramatically lowered from 5.0
+        'pencil': 5.0
     },
 
-    // Faraday Efficiency Factor (0.0 to 1.0)
-    // Pencil lead wastes immense energy to heat and breaking down the clay/graphite binder
+    // Intrinsic efficiency before thermal/PWM penalties
     materialEfficiency: {
         'platinum': 1.0,
         'graphite': 0.5,
-        'pencil': 0.05
+        'pencil': 0.1
     }
 };
 
 let currentSimulationAmps = 0;
+let temperatureCelsius = 25.0; // Start at room temp
+let materialHealth = 1.0; // 100% health
 
 setInterval(() => {
     if (isSimulationMode) {
@@ -604,52 +625,115 @@ setInterval(() => {
         }
 
         let currentDraw = 0;
+        let generatedH2MlPerSec = 0;
 
         if (isRunning && currentPwm > 0 && telemetry.waterLevelCm > 0) {
             // Get inputs
             const distanceCm = parseFloat(simDistance.value);
-            const materialRes = CONSTANTS.materials[simMaterial.value];
-            let conductivity = CONSTANTS.conductivities[simElectrolyte.value];
+            const materialType = simMaterial.value;
+            const electrolyteType = simElectrolyte.value;
 
-            // Baking Soda degradation
-            if (simElectrolyte.value === 'baking_soda') {
-                bakingSodaRunTime++;
-                // Drop to 50% efficiency over 120 seconds
-                const degradationFactor = Math.max(0.5, 1.0 - (bakingSodaRunTime / 120) * 0.5);
-                conductivity *= degradationFactor;
+            const materialRes = CONSTANTS.materials[materialType];
+            let conductivity = CONSTANTS.conductivities[electrolyteType];
+
+            // 1) Chemical Degradation
+            // Graphite/Pencil in strong base (KOH/NaOH) degrades very fast
+            // Baking soda degrades much slower
+            if (materialType === 'graphite' || materialType === 'pencil') {
+                if (electrolyteType === 'koh' || electrolyteType === 'naoh') {
+                    materialHealth -= (1.0 / 180); // Degrade to 0 in ~3 minutes
+                } else if (electrolyteType === 'baking_soda') {
+                    materialHealth -= (1.0 / 600); // Degrade to 0 in ~10 minutes
+                }
+            }
+            materialHealth = Math.max(0.01, materialHealth); // Don't go completely to zero to avoid div-by-zero
+
+            // Degraded materials are less conductive
+            const healthPenalty = 1.0 + (1.0 - materialHealth) * 5.0; // Resistance goes up 5x when dead
+
+            // 2) Thermodynamics & Conductivity Temperature Scaling (+2% per °C)
+            const tempDiff = temperatureCelsius - 25.0;
+            if (tempDiff > 0) {
+                conductivity = conductivity * (1.0 + (tempDiff * 0.02));
             }
 
-            // Calculate Total Resistance: Flattened distance effect so it still reacts at a distance.
+            // Calculate Total Resistance: Flattened distance effect
             const distanceFactor = 0.2 + (distanceCm * 0.08);
-            const totalResistance = (materialRes * distanceFactor) / conductivity;
+            const totalResistance = (materialRes * distanceFactor * healthPenalty) / conductivity;
 
-            // Calculate Amperage: (16.8V / Total Resistance) * (PWM / 100)
-            currentDraw = (CONSTANTS.voltage / totalResistance) * (currentPwm / 100);
+            // 3) Activation Overpotential & PWM Realities
+            // Must overcome 1.48V thermoneutral voltage.
+            let effectiveVoltage = CONSTANTS.voltage - CONSTANTS.activationVoltage;
+            if (effectiveVoltage < 0) effectiveVoltage = 0;
 
-            // Water consumes slowly proportional to amperage
-            telemetry.waterLevelCm -= (currentDraw * 0.005);
+            // Calculate raw amperage before PWM
+            const rawAmps = effectiveVoltage / totalResistance;
+
+            // PWM Efficiency Penalty (non-linear, Math.pow(pwm/100, 0.5))
+            // 50% PWM doesn't mean 50% efficiency, it hurts more due to chopping
+            const pwmRatio = currentPwm / 100.0;
+            currentDraw = rawAmps * pwmRatio;
+
+            const pwmEfficiency = Math.pow(pwmRatio, 0.5);
+
+            // Apply intrinsic material efficiency
+            const matEfficiency = CONSTANTS.materialEfficiency[materialType] * pwmEfficiency;
+
+            // 4) Thermal Heating & Boiling
+            // Power = V * I. Useful power goes into splitting water, the rest goes into heat.
+            const totalWatts = CONSTANTS.voltage * currentDraw;
+            const usefulWatts = totalWatts * matEfficiency;
+            const wastedWatts = totalWatts - usefulWatts;
+
+            // Heat the water: Q = mcΔT -> ΔT = Q / mc
+            const deltaTemp = (wastedWatts / CONSTANTS.heatCapacityWater) * CONSTANTS.heatSimulationMultiplier;
+            temperatureCelsius += deltaTemp;
+
+            // Cap at boiling point (100°C) and boil off water
+            if (temperatureCelsius > 100.0) {
+                temperatureCelsius = 100.0;
+                // Boiling loses water level fast (e.g., 1cm per 5-10s at max power)
+                const excessHeat = wastedWatts * CONSTANTS.heatSimulationMultiplier;
+                // Boil rate factor
+                telemetry.waterLevelCm -= (excessHeat * 0.0001);
+            }
+
+            // Normal electrolysis water consumption
+            telemetry.waterLevelCm -= (currentDraw * 0.0005);
+            if (telemetry.waterLevelCm < 0) telemetry.waterLevelCm = 0;
+
+            // 5) Gas Production
+            generatedH2MlPerSec = (currentDraw * CONSTANTS.yieldMlPerAmpMin * matEfficiency) / 60;
+        }
+
+        // Ambient cooling
+        if (temperatureCelsius > 25.0 && (!isRunning || currentPwm === 0)) {
+            temperatureCelsius -= 0.05; // Cool down
+            if (temperatureCelsius < 25.0) temperatureCelsius = 25.0;
         }
 
         currentSimulationAmps = currentDraw;
 
-        // Apply intrinsic material efficiency (e.g. pencil wastes 95% of energy)
-        const matEfficiency = CONSTANTS.materialEfficiency[simMaterial.value];
+        // 6) Dynamic Headspace Diffusion Model
+        // dPPM/dt = ProductionRate - EscapeRate
+        // First convert raw volume to a base PPM rate
+        let productionRate = (generatedH2MlPerSec / CONSTANTS.headspaceVolumeMl) * 1000000;
 
-        // H2 Production (mL/min) = Amperage * 7.5 * efficiency
-        // Per second: (Amperage * 7.5 * efficiency) / 60
-        const h2MlPerSec = (currentDraw * CONSTANTS.yieldMlPerAmpMin * matEfficiency) / 60;
-        telemetry.totalH2mL += h2MlPerSec;
+        // Compress the production curve so it plateaus naturally at expected values
+        // We want platinum (~1.5A * eff) to plateau around 130-140 PPM, pencil at 25-50 PPM.
+        let scaledProductionPpmPerSec = Math.pow(productionRate, 0.45) * 6.5;
+        if (isNaN(scaledProductionPpmPerSec)) scaledProductionPpmPerSec = 0;
 
-        // Convert total H2 volume to PPM in 5000mL container
-        let calculatedPpm = (telemetry.totalH2mL / CONSTANTS.containerVolumeMl) * 1000000;
+        const currentPPM = telemetry.h2Ppm;
+        const escapeRate = CONSTANTS.escapeFactor * currentPPM;
 
-        // Vent leak
-        calculatedPpm -= CONSTANTS.ventLeakPpmPerSec;
-        calculatedPpm = Math.max(0, calculatedPpm);
+        const deltaPPM = scaledProductionPpmPerSec - escapeRate;
 
-        // Back-calculate totalH2mL from the new PPM (so it doesn't drop below 0 effectively)
-        telemetry.totalH2mL = (calculatedPpm * CONSTANTS.containerVolumeMl) / 1000000;
-        telemetry.h2Ppm = calculatedPpm;
+        telemetry.h2Ppm += deltaPPM;
+        if (telemetry.h2Ppm < 0) telemetry.h2Ppm = 0;
+
+        // For visual chart scaling, we'll keep totalH2mL somewhat linked but it's not the primary source of truth anymore
+        telemetry.totalH2mL += generatedH2MlPerSec;
 
     } else {
         // --- LIVE TELEMETRY MODE ---
@@ -675,17 +759,20 @@ setInterval(() => {
             // PPM change over the window
             const ppmDelta = newest.ppm - oldest.ppm;
 
-            // Account for vent leak in the delta calculation to get true production
-            // If we didn't produce anything, the delta would be exactly -ventLeak over time.
-            // True Delta = Observed Delta + Vent Leak over that time
-            const ventLoss = CONSTANTS.ventLeakPpmPerSec * timeDiffSec;
-            const truePpmDelta = ppmDelta + ventLoss;
+            // Account for the escape rate in the delta calculation to get true production
+            // True Delta = Observed Delta + Escaped gas over that time
+            const averagePpmOverWindow = (newest.ppm + oldest.ppm) / 2;
+            const escapeLossPpm = (CONSTANTS.escapeFactor * averagePpmOverWindow) * timeDiffSec;
+            const truePpmDelta = ppmDelta + escapeLossPpm;
 
-            // Convert true PPM delta back to mL
-            const deltaMl = (truePpmDelta * CONSTANTS.containerVolumeMl) / 1000000;
-
-            // Calculate rate per minute
-            currentH2MlPerMin = (deltaMl / timeDiffSec) * 60;
+            // Calculate rate per minute based on the dynamic compression curve formula reversed
+            // productionPpmPerSec = Math.pow(x, 0.45) * 6.5
+            // So: x = Math.pow(productionPpmPerSec / 6.5, 1/0.45)
+            const productionPpmPerSec = truePpmDelta / timeDiffSec;
+            if (productionPpmPerSec > 0) {
+                const h2MlPerSec = Math.pow(productionPpmPerSec / 6.5, 1/0.45) * (CONSTANTS.headspaceVolumeMl / 1000000);
+                currentH2MlPerMin = h2MlPerSec * 60;
+            }
         }
     }
 
