@@ -52,6 +52,25 @@ let h2PpmHistory10s = []; // Array of {time, ppm}
 
 // Simulation State
 let bakingSodaRunTime = 0; // seconds
+let previousSimulationAmps = 0;
+
+// Simulation Calculation Values (Export for UI)
+let simCalc = {
+    faradayAmps: 0,
+    faradayEff: 0,
+    faradayYield: 0,
+    nernstTemp: 25.0,
+    nernstVolts: 1.229,
+    tafelDensity: 0,
+    tafelExchange: 0,
+    tafelOverpotential: 0,
+    thermoWatts: 0,
+    thermoWasted: 0,
+    thermoDelta: 0,
+    bruggemanVoid: 0,
+    sludgeRatio: 1,
+    electroMult: 1
+};
 
 // History for Chart
 const maxHistoryPoints = 60;
@@ -488,6 +507,73 @@ function drawCanvas() {
 animationId = requestAnimationFrame(drawCanvas);
 
 
+// --- Elements (Global Tabs & Calculations) ---
+const tabMain = document.getElementById('tab-main');
+const tabCalc = document.getElementById('tab-calc');
+const viewMainDashboard = document.getElementById('view-main-dashboard');
+const viewSimulationCalculations = document.getElementById('view-simulation-calculations');
+
+// Helper to flash value if changed
+function updateAndFlashValue(elementId, newValue, formatString) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+
+    // Store old raw value on element dataset to compare
+    const oldRaw = el.dataset.rawVal;
+
+    // Only update and flash if the value has changed significantly (e.g. rounded display value changed)
+    const newDisplayString = formatString.replace('{val}', newValue);
+
+    if (el.innerText !== newDisplayString) {
+        el.innerText = newDisplayString;
+
+        // Remove and re-add class for animation restart
+        el.classList.remove('text-flash-cyan');
+        void el.offsetWidth; // trigger reflow
+        el.classList.add('text-flash-cyan');
+
+        // Add active flow to parent card
+        const card = el.closest('.calc-card');
+        if (card) {
+            card.classList.add('active-flow');
+            clearTimeout(card.flowTimeout);
+            card.flowTimeout = setTimeout(() => {
+                card.classList.remove('active-flow');
+            }, 1000); // Keep flow active shortly after change
+        }
+    }
+    el.dataset.rawVal = newValue;
+}
+
+// Global Tab Event Listeners
+tabMain.addEventListener('click', () => {
+    tabMain.classList.replace('border-transparent', 'border-theme-cyan');
+    tabMain.classList.replace('text-theme-text-dim', 'text-theme-cyan');
+
+    tabCalc.classList.replace('border-theme-cyan', 'border-transparent');
+    tabCalc.classList.replace('text-theme-cyan', 'text-theme-text-dim');
+
+    viewMainDashboard.classList.remove('hidden');
+    viewMainDashboard.classList.add('flex');
+
+    viewSimulationCalculations.classList.add('hidden');
+    viewSimulationCalculations.classList.remove('flex');
+});
+
+tabCalc.addEventListener('click', () => {
+    tabCalc.classList.replace('border-transparent', 'border-theme-cyan');
+    tabCalc.classList.replace('text-theme-text-dim', 'text-theme-cyan');
+
+    tabMain.classList.replace('border-theme-cyan', 'border-transparent');
+    tabMain.classList.replace('text-theme-cyan', 'text-theme-text-dim');
+
+    viewSimulationCalculations.classList.remove('hidden');
+    viewSimulationCalculations.classList.add('flex');
+
+    viewMainDashboard.classList.add('hidden');
+    viewMainDashboard.classList.remove('flex');
+});
+
 // --- Event Listeners ---
 
 btnStart.addEventListener('click', () => {
@@ -651,19 +737,60 @@ setInterval(() => {
             // Degraded materials are less conductive
             const healthPenalty = 1.0 + (1.0 - materialHealth) * 5.0; // Resistance goes up 5x when dead
 
-            // 2) Thermodynamics & Conductivity Temperature Scaling (+2% per °C)
+            // 2) Void Fraction (Bruggeman)
+            const estimatedVoidFraction = Math.min(0.6, previousSimulationAmps * 0.015);
+            const bubblePenalty = Math.pow(1.0 - estimatedVoidFraction, 1.5);
+
+            simCalc.bruggemanVoid = estimatedVoidFraction;
+
+            // 3) Thermodynamics & Electrolyte Sludge
+            let baseConductivity = conductivity;
             const tempDiff = temperatureCelsius - 25.0;
             if (tempDiff > 0) {
-                conductivity = conductivity * (1.0 + (tempDiff * 0.02));
+                baseConductivity = baseConductivity * (1.0 + (tempDiff * 0.02));
             }
+
+            const ratio = 20.0 / Math.max(1.0, telemetry.waterLevelCm);
+            simCalc.sludgeRatio = ratio;
+
+            let sludgeMultiplier = 1.0;
+            if (ratio > 2.5) {
+                sludgeMultiplier = Math.max(0.1, (3.5 - ratio));
+            }
+            simCalc.electroMult = sludgeMultiplier * bubblePenalty;
+
+            conductivity = baseConductivity * sludgeMultiplier * bubblePenalty;
 
             // Calculate Total Resistance: Flattened distance effect
             const distanceFactor = 0.2 + (distanceCm * 0.08);
             const totalResistance = (materialRes * distanceFactor * healthPenalty) / conductivity;
 
-            // 3) Activation Overpotential & PWM Realities
-            // Must overcome 1.48V thermoneutral voltage.
-            let effectiveVoltage = CONSTANTS.voltage - CONSTANTS.activationVoltage;
+            // 4) Dynamic Nernst Equation (Reversible Voltage)
+            const reversibleVoltage = 1.229 - (0.00085 * (temperatureCelsius - 25.0));
+            simCalc.nernstTemp = temperatureCelsius;
+            simCalc.nernstVolts = reversibleVoltage;
+
+            // 5) Tafel Equation (Activation Overpotential)
+            let tafelSlope = 0.12;
+            let exchangeCurrent = 0.00001;
+            if (materialType === 'platinum') {
+                tafelSlope = 0.03;
+                exchangeCurrent = 0.001;
+            }
+
+            const currentDensity = previousSimulationAmps / Math.max(1.0, 50 * (telemetry.waterLevelCm / 20.0));
+            let activationOverpotential = 0;
+            if (currentDensity > exchangeCurrent) {
+                activationOverpotential = tafelSlope * Math.log10(currentDensity / exchangeCurrent);
+            }
+
+            simCalc.tafelDensity = currentDensity;
+            simCalc.tafelExchange = exchangeCurrent;
+            simCalc.tafelOverpotential = activationOverpotential;
+
+            // 6) Effective Voltage & Amperage
+            // Must overcome reversible voltage + activation overpotential
+            let effectiveVoltage = CONSTANTS.voltage - (reversibleVoltage + activationOverpotential);
             if (effectiveVoltage < 0) effectiveVoltage = 0;
 
             // Calculate raw amperage before PWM
@@ -679,15 +806,19 @@ setInterval(() => {
             // Apply intrinsic material efficiency
             const matEfficiency = CONSTANTS.materialEfficiency[materialType] * pwmEfficiency;
 
-            // 4) Thermal Heating & Boiling
+            // 7) Thermal Heating & Boiling
             // Power = V * I. Useful power goes into splitting water, the rest goes into heat.
             const totalWatts = CONSTANTS.voltage * currentDraw;
             const usefulWatts = totalWatts * matEfficiency;
             const wastedWatts = totalWatts - usefulWatts;
 
+            simCalc.thermoWatts = totalWatts;
+            simCalc.thermoWasted = wastedWatts;
+
             // Heat the water: Q = mcΔT -> ΔT = Q / mc
             const deltaTemp = (wastedWatts / CONSTANTS.heatCapacityWater) * CONSTANTS.heatSimulationMultiplier;
             temperatureCelsius += deltaTemp;
+            simCalc.thermoDelta = deltaTemp;
 
             // Cap at boiling point (100°C) and boil off water
             if (temperatureCelsius > 100.0) {
@@ -702,8 +833,20 @@ setInterval(() => {
             telemetry.waterLevelCm -= (currentDraw * 0.0005);
             if (telemetry.waterLevelCm < 0) telemetry.waterLevelCm = 0;
 
-            // 5) Gas Production
+            // 8) Gas Production
             generatedH2MlPerSec = (currentDraw * CONSTANTS.yieldMlPerAmpMin * matEfficiency) / 60;
+
+            simCalc.faradayAmps = currentDraw;
+            simCalc.faradayEff = matEfficiency * 100;
+            simCalc.faradayYield = generatedH2MlPerSec * 60;
+        } else {
+            // Reset some sim calc values if not running or no water
+            simCalc.faradayAmps = 0;
+            simCalc.faradayEff = 0;
+            simCalc.faradayYield = 0;
+            simCalc.thermoWatts = 0;
+            simCalc.thermoWasted = 0;
+            simCalc.thermoDelta = 0;
         }
 
         // Ambient cooling
@@ -713,8 +856,9 @@ setInterval(() => {
         }
 
         currentSimulationAmps = currentDraw;
+        previousSimulationAmps = currentSimulationAmps;
 
-        // 6) Dynamic Headspace Diffusion Model
+        // 9) Dynamic Headspace Diffusion Model
         // dPPM/dt = ProductionRate - EscapeRate
         // First convert raw volume to a base PPM rate
         let productionRate = (generatedH2MlPerSec / CONSTANTS.headspaceVolumeMl) * 1000000;
@@ -827,6 +971,27 @@ setInterval(() => {
 
     // Render updates
     updateUI();
+
+    // Update Simulation Calculation Tab Visuals
+    updateAndFlashValue('calc-faraday-amps', simCalc.faradayAmps.toFixed(2), '[ {val} ]');
+    updateAndFlashValue('calc-faraday-eff', simCalc.faradayEff.toFixed(0), '[ {val}% ]');
+    updateAndFlashValue('calc-faraday-yield', simCalc.faradayYield.toFixed(2), '[ {val} mL/min ]');
+
+    updateAndFlashValue('calc-nernst-temp', simCalc.nernstTemp.toFixed(1), '[ {val} ]');
+    updateAndFlashValue('calc-nernst-volts', simCalc.nernstVolts.toFixed(3), '[ {val} V ]');
+
+    updateAndFlashValue('calc-tafel-density', simCalc.tafelDensity.toFixed(4), '[ {val} ]');
+    updateAndFlashValue('calc-tafel-exchange', simCalc.tafelExchange.toFixed(5), '[ {val} ]');
+    updateAndFlashValue('calc-tafel-overpotential', simCalc.tafelOverpotential.toFixed(3), '[ {val} V ]');
+
+    updateAndFlashValue('calc-thermo-watts', simCalc.thermoWatts.toFixed(2), '[ {val} W ]');
+    updateAndFlashValue('calc-thermo-wasted', simCalc.thermoWasted.toFixed(2), '[ {val} W ]');
+    let deltaSign = simCalc.thermoDelta >= 0 ? '+' : '';
+    updateAndFlashValue('calc-thermo-delta', simCalc.thermoDelta.toFixed(2), `[ ${deltaSign}{val} °C/s ]`);
+
+    updateAndFlashValue('calc-bruggeman-void', simCalc.bruggemanVoid.toFixed(3), '[ {val} ]');
+    updateAndFlashValue('calc-sludge-ratio', simCalc.sludgeRatio.toFixed(2), '[ {val} ]');
+    updateAndFlashValue('calc-electro-mult', simCalc.electroMult.toFixed(2), '[ {val}x ]');
 
 }, 1000);
 

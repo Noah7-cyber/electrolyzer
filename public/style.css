@@ -175,3 +175,68 @@ input[type=range]:disabled::-webkit-slider-runnable-track {
 .value-flash {
   animation: valueUpdate 0.5s ease-out;
 }
+
+@keyframes textFlashCyan {
+  0% {
+    color: #fff;
+    text-shadow: 0 0 15px var(--color-theme-cyan);
+  }
+  100% {
+    text-shadow: none;
+  }
+}
+
+.text-flash-cyan {
+  animation: textFlashCyan 0.4s ease-out;
+}
+
+/* Data flow pulse animation */
+@property --gradient-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes dataFlowPulse {
+  0% {
+    --gradient-angle: 0deg;
+  }
+  100% {
+    --gradient-angle: 360deg;
+  }
+}
+
+.calc-card::before,
+.calc-card::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  background: conic-gradient(
+    from var(--gradient-angle),
+    var(--color-theme-border),
+    var(--color-theme-border),
+    var(--color-theme-cyan),
+    var(--color-theme-border),
+    var(--color-theme-border)
+  );
+  border-radius: inherit;
+  animation: dataFlowPulse 4s linear infinite;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.calc-card::after {
+  filter: blur(10px);
+}
+
+.calc-card.active-flow::before,
+.calc-card.active-flow::after {
+  opacity: 1;
+}
+
+.calc-card {
+  background-clip: padding-box;
+  /* Make sure the main background covers the inner area */
+  background-color: var(--color-theme-panel);
+}
