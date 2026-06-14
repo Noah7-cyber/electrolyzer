@@ -510,8 +510,10 @@ animationId = requestAnimationFrame(drawCanvas);
 // --- Elements (Global Tabs & Calculations) ---
 const tabMain = document.getElementById('tab-main');
 const tabCalc = document.getElementById('tab-calc');
+const tabTheory = document.getElementById('tab-theory');
 const viewMainDashboard = document.getElementById('view-main-dashboard');
 const viewSimulationCalculations = document.getElementById('view-simulation-calculations');
+const viewTheoryEngineering = document.getElementById('view-theory-engineering');
 
 // Helper to flash value if changed
 function updateAndFlashValue(elementId, newValue, formatString) {
@@ -546,32 +548,48 @@ function updateAndFlashValue(elementId, newValue, formatString) {
 }
 
 // Global Tab Event Listeners
-tabMain.addEventListener('click', () => {
-    tabMain.classList.replace('border-transparent', 'border-theme-cyan');
-    tabMain.classList.replace('text-theme-text-dim', 'text-theme-cyan');
+function switchTab(activeTabId) {
+    const tabs = [
+        { btn: tabMain, view: viewMainDashboard },
+        { btn: tabCalc, view: viewSimulationCalculations },
+        { btn: tabTheory, view: viewTheoryEngineering }
+    ];
 
-    tabCalc.classList.replace('border-theme-cyan', 'border-transparent');
-    tabCalc.classList.replace('text-theme-cyan', 'text-theme-text-dim');
+    tabs.forEach(tab => {
+        if (tab.btn.id === activeTabId) {
+            tab.btn.classList.replace('border-transparent', 'border-theme-cyan');
+            tab.btn.classList.replace('text-theme-text-dim', 'text-theme-cyan');
+            tab.view.classList.remove('hidden');
+            tab.view.classList.add('flex');
+        } else {
+            tab.btn.classList.replace('border-theme-cyan', 'border-transparent');
+            tab.btn.classList.replace('text-theme-cyan', 'text-theme-text-dim');
+            tab.view.classList.add('hidden');
+            tab.view.classList.remove('flex');
+        }
+    });
+}
 
-    viewMainDashboard.classList.remove('hidden');
-    viewMainDashboard.classList.add('flex');
+tabMain.addEventListener('click', () => switchTab('tab-main'));
+tabCalc.addEventListener('click', () => switchTab('tab-calc'));
+tabTheory.addEventListener('click', () => switchTab('tab-theory'));
 
-    viewSimulationCalculations.classList.add('hidden');
-    viewSimulationCalculations.classList.remove('flex');
-});
+// Theory Accordion Logic
+document.querySelectorAll('.theory-btn').forEach(button => {
+    button.addEventListener('click', () => {
+        const accordion = button.parentElement;
+        const isActive = accordion.classList.contains('active');
 
-tabCalc.addEventListener('click', () => {
-    tabCalc.classList.replace('border-transparent', 'border-theme-cyan');
-    tabCalc.classList.replace('text-theme-text-dim', 'text-theme-cyan');
+        // Close all other accordions
+        document.querySelectorAll('.theory-accordion').forEach(acc => {
+            acc.classList.remove('active');
+        });
 
-    tabMain.classList.replace('border-theme-cyan', 'border-transparent');
-    tabMain.classList.replace('text-theme-cyan', 'text-theme-text-dim');
-
-    viewSimulationCalculations.classList.remove('hidden');
-    viewSimulationCalculations.classList.add('flex');
-
-    viewMainDashboard.classList.add('hidden');
-    viewMainDashboard.classList.remove('flex');
+        // Toggle clicked accordion
+        if (!isActive) {
+            accordion.classList.add('active');
+        }
+    });
 });
 
 // --- Event Listeners ---
