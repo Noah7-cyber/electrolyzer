@@ -91,6 +91,9 @@
             <button id="tab-calc" class="h-full px-4 text-[12px] uppercase font-bold tracking-[1px] border-b-2 border-transparent text-theme-text-dim hover:text-theme-cyan transition-colors">
                 Simulation Calculations
             </button>
+            <button id="tab-theory" class="h-full px-4 text-[12px] uppercase font-bold tracking-[1px] border-b-2 border-transparent text-theme-text-dim hover:text-theme-cyan transition-colors">
+                Electrolysis Theory & Engineering
+            </button>
         </nav>
 
         <!-- Main Dashboard View -->
@@ -252,6 +255,148 @@
                 </div>
                 </div>
             </footer>
+        </div>
+
+        <!-- Theory & Engineering View -->
+        <div id="view-theory-engineering" class="hidden flex-col flex-1 overflow-y-auto p-6 bg-theme-bg z-10 gap-6 theory-container">
+            <div class="flex flex-col gap-4 w-full max-w-[1000px] mx-auto pb-10">
+
+                <div class="text-[14px] text-theme-text-dim uppercase tracking-[2px] mb-4 text-center">
+                    Theoretical Models & Core Concepts
+                </div>
+
+                <!-- Basic Electrochemistry Accordion -->
+                <div class="theory-accordion bg-theme-panel border border-theme-border rounded overflow-hidden shadow-lg transition-transform duration-300 hover:-translate-y-1 hover:shadow-theme-cyan/10">
+                    <button class="w-full flex items-center justify-between p-5 bg-theme-card border-b border-theme-border outline-none theory-btn">
+                        <div class="flex items-center gap-4 text-theme-cyan font-bold uppercase tracking-[2px]">
+                            <svg class="w-6 h-6 animate-float" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/>
+                            </svg>
+                            Basic Electrochemistry
+                        </div>
+                        <div class="text-theme-text-dim transform transition-transform duration-300 expand-icon">▼</div>
+                    </button>
+                    <div class="theory-content bg-theme-bg p-0 max-h-0 overflow-hidden transition-all duration-500 ease-in-out">
+                        <div class="p-6 text-theme-text-main leading-relaxed text-[14px] font-mono border-t border-theme-border/50">
+                            <p class="mb-4">
+                                Electrolysis is the process of using an electrical current to drive a non-spontaneous chemical reaction. In an aqueous solution, water (H₂O) is split into its constituent elements: hydrogen gas (H₂) at the cathode, and oxygen gas (O₂) at the anode.
+                            </p>
+                            <div class="bg-black/50 p-4 rounded border border-theme-border flex items-center justify-center gap-4 text-lg">
+                                <span class="theory-badge" data-tooltip="Two Water Molecules">2H₂O(l)</span>
+                                <span>→</span>
+                                <span class="theory-badge text-theme-cyan" data-tooltip="Diatomic Hydrogen Gas">2H₂(g)</span>
+                                <span>+</span>
+                                <span class="theory-badge text-theme-amber" data-tooltip="Diatomic Oxygen Gas">O₂(g)</span>
+                            </div>
+                            <p class="mt-4 text-theme-text-dim text-[12px]">
+                                To maintain conductivity, an electrolyte (such as KOH or NaOH) is added to the distilled water, creating a path for ion exchange without being consumed in the primary reaction.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Faraday's Law Accordion -->
+                <div class="theory-accordion bg-theme-panel border border-theme-border rounded overflow-hidden shadow-lg transition-transform duration-300 hover:-translate-y-1 hover:shadow-theme-cyan/10">
+                    <button class="w-full flex items-center justify-between p-5 bg-theme-card border-b border-theme-border outline-none theory-btn">
+                        <div class="flex items-center gap-4 text-theme-cyan font-bold uppercase tracking-[2px]">
+                            <svg class="w-6 h-6 animate-pulse-slow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
+                            </svg>
+                            Faraday's Law of Electrolysis
+                        </div>
+                        <div class="text-theme-text-dim transform transition-transform duration-300 expand-icon">▼</div>
+                    </button>
+                    <div class="theory-content bg-theme-bg p-0 max-h-0 overflow-hidden transition-all duration-500 ease-in-out">
+                        <div class="p-6 text-theme-text-main leading-relaxed text-[14px] font-mono border-t border-theme-border/50">
+                            <p class="mb-4">
+                                Faraday's First Law states that the mass of a substance altered at an electrode is directly proportional to the total electrical charge transferred. For engineering purposes, we map total amperage to gas yield.
+                            </p>
+                            <div class="bg-black/50 p-4 rounded border border-theme-border flex flex-col items-center justify-center gap-2 text-md">
+                                <div class="flex items-center gap-2">
+                                    <span class="theory-badge" data-tooltip="Hydrogen Volume (mL)">V</span> =
+                                    <span>(</span>
+                                    <span class="theory-badge text-theme-amber" data-tooltip="Current (Amps)">I</span> ×
+                                    <span class="theory-badge text-theme-text-dim" data-tooltip="Time (Seconds)">t</span> ×
+                                    <span class="theory-badge" data-tooltip="Molar Volume of Gas (L/mol)">Vₘ</span>
+                                    <span>) / (</span>
+                                    <span class="theory-badge text-theme-cyan" data-tooltip="Number of Electrons transferred (z=2)">z</span> ×
+                                    <span class="theory-badge text-theme-cyan" data-tooltip="Faraday Constant (96485 C/mol)">F</span>
+                                    <span>)</span>
+                                </div>
+                            </div>
+                            <p class="mt-4 text-theme-text-dim text-[12px]">
+                                In this dashboard's simulation, this is simplified mathematically to a direct yield constant based on assumed ideal efficiency, penalized by thermal losses and internal resistance.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Thermodynamics & Nernst Accordion -->
+                <div class="theory-accordion bg-theme-panel border border-theme-border rounded overflow-hidden shadow-lg transition-transform duration-300 hover:-translate-y-1 hover:shadow-theme-cyan/10">
+                    <button class="w-full flex items-center justify-between p-5 bg-theme-card border-b border-theme-border outline-none theory-btn">
+                        <div class="flex items-center gap-4 text-theme-cyan font-bold uppercase tracking-[2px]">
+                            <svg class="w-6 h-6 animate-pulse-glow-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
+                            </svg>
+                            Thermodynamics & Nernst Equation
+                        </div>
+                        <div class="text-theme-text-dim transform transition-transform duration-300 expand-icon">▼</div>
+                    </button>
+                    <div class="theory-content bg-theme-bg p-0 max-h-0 overflow-hidden transition-all duration-500 ease-in-out">
+                        <div class="p-6 text-theme-text-main leading-relaxed text-[14px] font-mono border-t border-theme-border/50">
+                            <p class="mb-4">
+                                The minimum voltage required to split water is not constant. The Nernst equation demonstrates how the reversible cell voltage decreases slightly as the system's ambient temperature rises.
+                            </p>
+                            <div class="bg-black/50 p-4 rounded border border-theme-border flex items-center justify-center gap-2 text-md">
+                                <span class="theory-badge text-theme-cyan" data-tooltip="Reversible Voltage (Volts)">E</span> =
+                                <span class="theory-badge" data-tooltip="Standard Potential (1.229 V)">E°</span> -
+                                <span>(</span>
+                                <span class="theory-badge text-theme-text-dim" data-tooltip="Ideal Gas Constant">R</span> ×
+                                <span class="theory-badge text-theme-red" data-tooltip="Temperature (Kelvin)">T</span>
+                                <span>) / (</span>
+                                <span class="theory-badge" data-tooltip="Moles of Electrons (z=2)">z</span> ×
+                                <span class="theory-badge" data-tooltip="Faraday Constant">F</span>
+                                <span>)</span> × ln(<span class="theory-badge text-theme-text-dim" data-tooltip="Reaction Quotient">Q</span>)
+                            </div>
+                            <p class="mt-4 text-theme-text-dim text-[12px]">
+                                While increasing temperature lowers the required voltage threshold (aiding efficiency), excessive heat represents wasted power. Unused wattage converts to thermal energy, heating the fluid according to its specific heat capacity and eventually leading to boiling off the water level.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Activation Overpotential Accordion -->
+                <div class="theory-accordion bg-theme-panel border border-theme-border rounded overflow-hidden shadow-lg transition-transform duration-300 hover:-translate-y-1 hover:shadow-theme-cyan/10">
+                    <button class="w-full flex items-center justify-between p-5 bg-theme-card border-b border-theme-border outline-none theory-btn">
+                        <div class="flex items-center gap-4 text-theme-cyan font-bold uppercase tracking-[2px]">
+                            <svg class="w-6 h-6 animate-pulse-lightning" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                            </svg>
+                            Activation Overpotential (Tafel Equation)
+                        </div>
+                        <div class="text-theme-text-dim transform transition-transform duration-300 expand-icon">▼</div>
+                    </button>
+                    <div class="theory-content bg-theme-bg p-0 max-h-0 overflow-hidden transition-all duration-500 ease-in-out">
+                        <div class="p-6 text-theme-text-main leading-relaxed text-[14px] font-mono border-t border-theme-border/50">
+                            <p class="mb-4">
+                                Achieving electrolysis requires overcoming not just the thermodynamic threshold, but also kinetic barriers at the electrode surfaces. This extra required voltage is known as activation overpotential. The Tafel equation models this resistance at higher current densities.
+                            </p>
+                            <div class="bg-black/50 p-4 rounded border border-theme-border flex items-center justify-center gap-2 text-md">
+                                <span class="theory-badge text-theme-red" data-tooltip="Activation Overpotential (Volts)">η</span> =
+                                <span class="theory-badge text-theme-cyan" data-tooltip="Tafel Slope (Material Dependent)">a</span> ×
+                                log₁₀(
+                                <span class="theory-badge text-theme-amber" data-tooltip="Current Density (A/cm²)">i</span> /
+                                <span class="theory-badge text-theme-text-dim" data-tooltip="Exchange Current Density">i₀</span>
+                                )
+                            </div>
+                            <p class="mt-4 text-theme-text-dim text-[12px]">
+                                Material selection is crucial here. Platinum has extremely high exchange current density (low barrier), while graphite or pencil lead requires far more power to drive the same reaction rate. As current density scales, the overpotential penalty rapidly increases.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
         </div>
 
         <!-- Calculations View -->
